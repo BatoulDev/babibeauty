@@ -4,14 +4,25 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 
-Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:20,1');
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
+// Constrain numeric IDs globally
+Route::pattern('category', '[0-9]+');
 
-Route::get('/categories',            [CategoryController::class, 'index']);
-Route::get('/categories/{category}', [CategoryController::class, 'show']);
+// ── Auth endpoints (rate-limited, grouped under /auth)
+Route::prefix('auth')->name('auth.')->middleware('throttle:20,1')->group(function () {
+    Route::post('/register', [AuthController::class, 'register'])->name('register');
+    Route::post('/login',    [AuthController::class, 'login'])->name('login');
 
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/categories',              [CategoryController::class, 'store']);
-    Route::put('/categories/{category}',    [CategoryController::class, 'update']);
-    Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
+    // Optional utilities (work only if you later enable session/token auth)
+    Route::get('/me',          [AuthController::class, 'me'])->name('me');
+    Route::post('/logout',     [AuthController::class, 'logout'])->name('logout');
+    Route::post('/logout-all', [AuthController::class, 'logoutAll'])->name('logout-all');
+});
+
+// ── Categories
+// Public reads
+Route::apiResource('categories', CategoryController::class)->only(['index','show']);
+
+// Writes (you can keep them public or add simple throttling)
+Route::middleware('throttle:60,1')->group(function () {
+    Route::apiResource('categories', CategoryController::class)->only(['store','update','destroy']);
 });
