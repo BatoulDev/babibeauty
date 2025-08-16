@@ -9,6 +9,7 @@ use App\Http\Controllers\BeautyExpertController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\UserController;
 
 // Optional numeric constraints
 Route::pattern('category', '[0-9]+');
@@ -54,3 +55,10 @@ Route::apiResource('reviews', ReviewController::class)->only(['store','update','
 //order
 Route::apiResource('orders', OrderController::class)->only(['index','show']);
 Route::apiResource('orders', OrderController::class)->only(['store','update','destroy']);
+
+//users
+Route::get   ('/users',                [UserController::class, 'index']);
+Route::get   ('/users/{user}',         [UserController::class, 'show']);
+Route::post  ('/users',                [UserController::class, 'store']);
+Route::match (['put','patch'], '/users/{user}', [UserController::class, 'update']);
+Route::delete('/users/{user}',         [UserController::class, 'destroy']);
