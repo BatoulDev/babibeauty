@@ -8,7 +8,12 @@ use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Schemas\UserForm;
 use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
+<<<<<<< HEAD
 use BackedEnum;
+=======
+use Filament\Schemas\Schema; // ✅ v4
+
+>>>>>>> develop
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -18,12 +23,24 @@ class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
+<<<<<<< HEAD
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
     {
         return UserForm::configure($schema);
     }
+=======
+    // Filament v4 types:
+    protected static string|\BackedEnum|null $navigationIcon  = 'heroicon-o-user';
+    protected static string|\UnitEnum|null   $navigationGroup = 'User Management';
+
+// After (v4)
+public static function form(Schema $schema): Schema
+{
+    return UserForm::configure($schema);
+}
+>>>>>>> develop
 
     public static function table(Table $table): Table
     {
