@@ -8,7 +8,8 @@ use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Filament\Resources\Users\Schemas\UserForm;
 use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema; // ✅ v4
+
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 
@@ -16,13 +17,15 @@ class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
-    protected static ?string $navigationIcon  = 'heroicon-o-user';
-    protected static ?string $navigationGroup = 'User Management';
+    // Filament v4 types:
+    protected static string|\BackedEnum|null $navigationIcon  = 'heroicon-o-user';
+    protected static string|\UnitEnum|null   $navigationGroup = 'User Management';
 
-    public static function form(Form $form): Form
-    {
-        return UserForm::configure($form);
-    }
+// After (v4)
+public static function form(Schema $schema): Schema
+{
+    return UserForm::configure($schema);
+}
 
     public static function table(Table $table): Table
     {

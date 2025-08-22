@@ -2,12 +2,10 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
 
 class ProductsTable
 {
@@ -15,41 +13,37 @@ class ProductsTable
     {
         return $table
             ->columns([
-                TextColumn::make('brand.name')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('category.name')
-                    ->numeric()
-                    ->sortable(),
+                // If you have an accessor getImageUrlAttribute() use 'image_url'.
+                // Otherwise use 'image_path' with ->disk('public')
+                ImageColumn::make('image_path')
+                    ->label('Image')
+                    ->disk('public')
+                    ->square()
+                    ->width(56)
+                    ->height(56),
+
                 TextColumn::make('name')
-                    ->searchable(),
+                    ->searchable()
+                    ->limit(40),
+
+                TextColumn::make('brand.name')
+                    ->label('Brand')
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('category.name')
+                    ->label('Category')
+                    ->sortable()
+                    ->toggleable(),
+
                 TextColumn::make('price')
-                    ->money()
+                    ->money('USD', true)
                     ->sortable(),
-                TextColumn::make('stock')
-                    ->numeric()
-                    ->sortable(),
+
                 IconColumn::make('is_active')
-                    ->boolean(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->boolean()
+                    ->label('Active'),
             ])
-            ->filters([
-                //
-            ])
-            ->recordActions([
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
-            ]);
+            ->defaultSort('created_at', 'desc');
     }
 }
