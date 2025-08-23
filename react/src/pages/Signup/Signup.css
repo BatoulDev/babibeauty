@@ -1,0 +1,9 @@
+.card-soft {
+  border: 0;
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+  overflow: hidden;
+  background: #fff;
+  max-width: 680px !important;   /* 👈 force override */
+  width: 100%;
+}
