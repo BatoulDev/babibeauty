@@ -1,0 +1,8 @@
+
+/* theme/footer */
+.bb-footer{
+  background:#561C24;
+  color:#fff;
+}
+.bb-footer a{ color:#eee8dc; text-decoration:none; }
+.bb-footer a:hover{ color:#ffffff; }

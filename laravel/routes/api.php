@@ -9,6 +9,7 @@ use App\Http\Controllers\BeautyExpertController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ContactController;
 
 // Optional numeric constraints
 Route::pattern('category', '[0-9]+');
@@ -26,6 +27,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/logout',   [AuthController::class, 'logout'])->name('logout');
     Route::post('/logout-all', [AuthController::class, 'logoutAll'])->name('logout-all');
 });
+
 
 // ── Categories
 Route::apiResource('categories', CategoryController::class)->only(['index','show']);
@@ -54,3 +56,6 @@ Route::apiResource('reviews', ReviewController::class)->only(['store','update','
 //order
 Route::apiResource('orders', OrderController::class)->only(['index','show']);
 Route::apiResource('orders', OrderController::class)->only(['store','update','destroy']);
+
+//Contact
+Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:10,1');

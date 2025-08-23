@@ -1,0 +1,62 @@
+/* === Contact Page === */
+.contact-page {
+  background-color: #fdf9f8;
+  color: #333;
+}
+
+/* Hero Section */
+.contact-hero {
+  background: linear-gradient(rgba(86, 28, 36, 0.8), rgba(86, 28, 36, 0.8)),
+    url("../../assets/images/contact-bg.jpg") center/cover no-repeat;
+  padding: 100px 20px;
+  color: #fff;
+}
+.contact-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.contact-subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+/* Cards */
+.contact-card,
+.contact-info {
+  border-radius: 12px;
+  background: #fff;
+}
+
+/* Button */
+.bb-btn {
+  background-color: #561c24;
+  color: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  font-weight: 600;
+  transition: 0.3s;
+}
+.bb-btn:hover {
+  background-color: #6d2932;
+  color: #fff;
+}
+
+/* Info Section */
+.contact-info h3 {
+  color: #561c24;
+}
+.contact-info i {
+  color: #561c24;
+}
+
+/* Social Links */
+.social-links a {
+  font-size: 1.4rem;
+  margin-right: 15px;
+  color: #561c24;
+  transition: 0.3s;
+}
+.social-links a:hover {
+  color: #6d2932;
+}

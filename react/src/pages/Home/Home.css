@@ -1,0 +1,176 @@
+/* =========================================================
+   THEME / GLOBAL (Navbar, Footer, Buttons, Wordmark)
+   ========================================================= */
+:root { --bb-accent: #561C24; }
+
+
+/* Wordmark */
+.bb-wordmark {
+  font-family: "Syncopate", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  line-height: 1;
+  font-size: 28px;
+}
+
+/* Badge utility */
+.bb-badge { display: inline-block; padding: 6px 14px; background: transparent; }
+
+/* Brand buttons */
+.bb-btn {
+  background-color: var(--bb-accent) !important;
+  border-color: var(--bb-accent) !important;
+  color: #fff !important;
+  font-size: 1.1rem;
+  padding: .5rem 1rem;
+  border-radius: .5rem;
+}
+.bb-btn:hover,
+.bb-btn:focus {
+  background-color: #6a202a !important;
+  border-color: #6a202a !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+.bb-btn-outline {
+  background: transparent !important;
+  border-color: var(--bb-accent) !important;
+  color: wheat !important;
+  font-size: 1.1rem;
+  padding: .5rem 1rem;
+  border-radius: .5rem;
+}
+.bb-btn-outline:hover,
+.bb-btn-outline:focus {
+  background-color: var(--bb-accent) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+/* =========================================================
+   HOME – CATEGORY BAR (sticky + centered, scrollable pills)
+   ========================================================= */
+.bb-catbar {
+  position: sticky;
+  top: 0;                /* if your navbar is fixed and overlaps, change to its height */
+  z-index: 1030;
+  background: #561C24;   /* bordo */
+  border-bottom: 1px solid rgba(255,255,255,.15);
+}
+
+/* Horizontal scroll track */
+.bb-scroll {
+  display: flex;
+  gap: .5rem;
+  padding: .6rem 0 .8rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+
+  /* centered on all sizes */
+  justify-content: center;
+}
+.bb-scroll::-webkit-scrollbar { display: none; }
+
+/* Pills */
+.bb-catpill {
+  scroll-snap-align: start;
+  white-space: nowrap;
+  border-radius: 999px;
+  border-color: rgba(255,255,255,.55) !important;
+  color: #fff !important;
+  font-size: .875rem;
+  padding: .45rem .9rem;
+}
+.bb-catpill:hover { background: rgba(255,255,255,.1); }
+
+/* =========================================================
+   HOME – CAROUSEL / HERO
+   ========================================================= */
+.bb-carousel {
+  position: relative;
+  margin-bottom: 0 !important;   /* remove white strip under carousel */
+  background: #000;              /* avoids flash of white while image loads */
+}
+.bb-carousel .carousel-inner { overflow: hidden; }
+.bb-carousel .carousel-item { transition: transform .6s ease-in-out; }
+.bb-carousel .carousel-item img { display: block; }
+
+/* responsive hero image */
+.bb-hero {
+  height: clamp(280px, 60vh, 720px);
+  width: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+/* Caption button (nav link inside carousel) */
+.bb-cap-btn {
+  display: inline-block;
+  background-color: var(--bb-accent);   /* your bordo */
+  color: #fff !important;               /* force white text */
+  text-decoration: none;                /* remove underline */
+  font-weight: 600;
+  font-size: .95rem;
+  padding: .45rem 1rem;
+  border-radius: .5rem;
+  border: 1px solid var(--bb-accent);
+  transition: background-color .25s, transform .2s;
+}
+
+.bb-cap-btn:hover,
+.bb-cap-btn:focus {
+  background-color: #6a202a;            /* darker bordo on hover */
+  color: #fff !important;
+  transform: translateY(-2px);          /* subtle lift */
+  text-decoration: none;
+}
+
+/* Controls readable on dark/light images */
+.carousel-control-prev-icon,
+.carousel-control-next-icon {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)) invert(1);
+}
+
+/* Dots for touch */
+.bb-dots { margin-bottom: .5rem; }
+.bb-dots > button { width: .5rem; height: .5rem; border-radius: 50%; }
+
+/* =========================================================
+   TWEAKS FOR VERY SMALL PHONES
+   ========================================================= */
+@media (max-width: 576px) {
+  .bb-catpill { font-size: .82rem; padding: .4rem .8rem; }
+  .carousel-control-prev,
+  .carousel-control-next { width: 18%; } /* bigger tap targets */
+}
+
+
+
+/* Remove extra white gap below carousel */
+.carousel {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Make sure the body background matches your footer or carousel */
+body {
+  background-color: #561C24; /* or black/dark if you prefer */
+}
+
+/* Optional: if inside a section */
+section.carousel-section {
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+
+/* theme/footer */
+.bb-footer{
+  background:#561C24;
+  color:#fff;
+}
+.bb-footer a{ color:#eee8dc; text-decoration:none; }
+.bb-footer a:hover{ color:#ffffff; }
+

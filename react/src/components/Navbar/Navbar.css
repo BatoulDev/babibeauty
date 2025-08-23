@@ -1,0 +1,18 @@
+/* =========================================================
+   THEME / GLOBAL (Navbar)
+   ========================================================= */
+
+/* Navbar */
+.custom-navbar {
+  background-color: #6D2932 !important;
+}
+.custom-navbar .nav-link,
+.custom-navbar .navbar-brand {
+  color: #ffffff !important;
+}
+.custom-navbar .nav-link:hover {
+  color: #eee8dc !important;
+}
+.bb-catlink {
+  flex: 0 0 auto;   /* makes each link respect horizontal scroll */
+}
