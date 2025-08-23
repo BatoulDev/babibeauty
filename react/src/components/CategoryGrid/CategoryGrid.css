@@ -1,88 +1,165 @@
-:root{
-  --burgundy:#561C24;
-  --burgundy-2:#6D2932;
-  --wheat:#F3E6D3;
-  --paper:#fffaf4;
-  --ink:#2b1d1f;
-  --radius-xl:40px;
-  --shadow:0 12px 34px rgba(86,28,36,.14);
+/* src/components/CategoryGrid/CategoryGrid.css */
+
+/* ===== THEME ===== */
+:root {
+  --bb-burgundy: #561c24;  /* main burgundy */
+  --bb-burgundy-2: #6d2932;/* darker burgundy for hover */
+  --bb-wheat: #eee8dc;     /* wheat */
+  --bb-somo: #f8edee;      /* blush/salmon-rose */
+  --bb-ink: #271a1c;       /* readable text on light bg */
+
+  /* Oval sizing (tweak here to scale everything consistently) */
+  --oval-w: 180px;         /* width of each oval */
+  --oval-rx: 48%;          /* horizontal radius */
+  --oval-ry: 56%;          /* vertical radius */
 }
 
-.cat-section{
-  background:linear-gradient(180deg, var(--paper), #fff);
-  padding: clamp(40px, 6vw, 72px) 0;
-}
-.cat-section .container{ width:min(1200px, 92%); margin-inline:auto; text-align:center; }
-.cat-eyebrow{
-  margin:0;
-  text-transform:uppercase;
-  letter-spacing:.22em;
-  font-weight:700;
-  color:var(--burgundy-2);
-  font-size:.82rem;
-}
-.cat-title{
-  margin:.4rem 0 1.4rem;
-  color:var(--burgundy);
-  font-size:clamp(22px, 4.5vw, 32px);
+/* ===== SECTION BG ===== */
+.cat-section {
+  padding: clamp(28px, 5vw, 56px) 0;
+  background:
+    radial-gradient(1200px 400px at 50% -50%, var(--bb-somo) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bb-wheat) 0%, var(--bb-somo) 100%);
 }
 
-/* grid */
-.cat-grid{
-  display:grid;
-  gap: clamp(14px, 2vw, 24px);
-  grid-template-columns: repeat(4, 1fr);
-  align-items:start;
+/* keep content centered & capped */
+.cat-section .container {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
-/* card */
-.cat-card{
-  display:flex;
-  flex-direction:column;
-  gap:.6rem;
-  align-items:center;
-  text-decoration:none;
-  padding: clamp(10px, 1.3vw, 14px);
-  border-radius: 22px;
+/* ===== HEADINGS ===== */
+.cat-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--bb-burgundy);
+  font-size: 12px;
+  margin: 0 0 6px;
+  text-align: center;
 }
-.cat-card:hover .oval{ transform: translateY(-3px); box-shadow: var(--shadow); }
-.cat-card:focus-visible{ outline:2px solid var(--burgundy); outline-offset:4px; }
 
-/* oval image frame */
-.oval{
-  width: 100%;
-  aspect-ratio: 4 / 5;              /* tall portrait */
-  border-radius: 999px;             /* oval */
+.cat-title {
+  color: var(--bb-ink);
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 22px;
+  font-size: clamp(20px, 2.6vw, 28px);
+}
+
+/* ===== GRID ===== */
+/* 2 per row on mobile, 4 per row on tablet+ */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px 26px;            /* row / column gap */
+  align-items: start;
+  justify-items: center;     /* center cards inside cells */
+}
+
+@media (min-width: 768px) {
+  .cat-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ===== CARD ===== */
+.cat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  transition: transform .2s ease, filter .2s ease;
+  will-change: transform;
+  min-width: 0;
+}
+
+.cat-card:hover {
+  transform: translateY(-3px);
+  filter: drop-shadow(0 8px 14px rgba(86, 28, 36, 0.18));
+}
+
+/* ===== OVAL IMAGE FRAME (uniform for all) ===== */
+.oval {
+  width: var(--oval-w);
+  aspect-ratio: 3 / 4;                      /* consistent portrait proportion */
+  border-radius: var(--oval-rx) / var(--oval-ry);
+  position: relative;
   overflow: hidden;
-  background: linear-gradient(145deg, var(--wheat), #f8e9d6);
-  border: 2px solid rgba(86,28,36,.18);
-  transition: box-shadow .18s ease, transform .18s ease;
-}
-.oval img{
-  width:100%; height:100%;
-  object-fit: cover;                 /* fills frame nicely */
+  background: #fff;
 }
 
-/* fallback if no image provided */
-.placeholder{
-  height:100%; display:flex; align-items:center; justify-content:center;
-  color:var(--burgundy-2); font-weight:700; padding:12px; text-align:center;
+/* dotted border inset */
+.oval::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: var(--oval-rx) / var(--oval-ry);
+  border: 2px dotted var(--bb-burgundy);
+  pointer-events: none;
 }
 
-/* label */
-.cat-name{
-  color:var(--ink);
-  font-weight:600;
-  font-size: .98rem;
+/* image: same crop/position everywhere */
+.oval img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%; /* slight upward focus; adjust if needed */
 }
 
-/* responsive */
-@media (max-width: 1024px){
-  .cat-grid{ grid-template-columns: repeat(3, 1fr); }
+/* ===== LABEL / BADGE ===== */
+.cat-name {
+  color: var(--bb-burgundy);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  padding: 10px 14px;
+  min-height: 36px;                         /* keeps badges equal height */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bb-somo) 70%, white);
+  border: 1px solid color-mix(in oklab, var(--bb-burgundy) 25%, transparent);
+  text-align: center;
 }
-@media (max-width: 768px){
-  .cat-grid{ grid-template-columns: repeat(2, 1fr); }
+
+/* ===== SKELETONS ===== */
+.cat-skeleton {
+  width: var(--oval-w);
+  aspect-ratio: 3 / 4;
+  border-radius: var(--oval-rx) / var(--oval-ry);
+  margin-inline: auto;
+  background: linear-gradient(90deg, #ffffff 0%, #f4f0ef 40%, #ffffff 80%);
+  animation: shimmer 1.2s infinite linear;
+  border: 2px dashed #e7d9d7;
 }
-@media (max-width: 520px){
-  .cat-grid{ grid-template-columns: 1fr; max-width: 520px; margin-inline:auto; }
+
+@keyframes shimmer {
+  0%   { background-position: -200px 0; background-size: 400px 100%; }
+  100% { background-position: 200px 0;  background-size: 400px 100%; }
 }
+
+/* ===== ERROR ===== */
+.cat-error {
+  text-align: center;
+  color: #9b1c2a;
+  background: #ffe8ec;
+  border: 1px solid #ffccd5;
+  padding: 10px 14px;
+  border-radius: 8px;
+  max-width: 560px;
+  margin: 12px auto 0;
+}
+
+/* ===== SMALL PHONES: scale ovals slightly ===== */
+@media (max-width: 380px) {
+  :root { --oval-w: 150px; }
+}
+
+/* Hide section until first image (or timeout) says it's ready */
+.cat-section.is-hidden { opacity: 0; transform: translateY(6px); }
+.cat-section.is-ready  { opacity: 1; transform: none; transition: opacity .18s ease, transform .18s ease; }
+
+/* Prevent layout shifts: the ovals already have fixed width/ratio, so space is reserved */

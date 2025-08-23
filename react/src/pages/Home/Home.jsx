@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import "./Home.css";
+import CategoryGrid from "../../components/CategoryGrid/CategoryGrid";
+
+// ✅ import About and Contact
+import About from "../About/About";
+import Contact from "../Contact/Contact";
 
 import slide1 from "../../assets/images/slide2.jpg"; // Bag
 import slide2 from "../../assets/images/slide1.jpeg"; // Perfume
@@ -20,24 +25,24 @@ export default function Home() {
 
   return (
     <div className="container-fluid p-0">
-      {/* Category bar */}
+      {/* === Category bar === */}
       <nav className="bb-catbar">
         <div className="container">
           <div className="bb-scroll" aria-label="Product categories">
             {categories.map((cat) => (
-             <NavLink
-  key={cat.id}
-  to={`/category/${cat.id}`}
-  className="btn btn-outline-light bb-catpill bb-catlink"
->
-  {cat.name}
-</NavLink>
+              <NavLink
+                key={cat.id}
+                to={`/category/${cat.id}`}
+                className="btn btn-outline-light bb-catpill bb-catlink"
+              >
+                {cat.name}
+              </NavLink>
             ))}
           </div>
         </div>
       </nav>
 
-      {/* Carousel */}
+      {/* === Carousel === */}
       <div
         id="homeCarousel"
         className="carousel slide bb-carousel"
@@ -90,6 +95,15 @@ export default function Home() {
           <button type="button" data-bs-target="#homeCarousel" data-bs-slide-to="2" aria-label="Slide 3" />
         </div>
       </div>
+
+      {/* === Category strip just below the carousel === */}
+      <CategoryGrid title="Popular Categories" />
+
+      {/* === About Section === */}
+      <About />
+
+      {/* === Contact Section === */}
+      <Contact />
     </div>
   );
 }
