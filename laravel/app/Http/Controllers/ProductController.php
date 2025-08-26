@@ -6,6 +6,7 @@ use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class ProductController extends Controller
 {
@@ -126,7 +127,8 @@ class ProductController extends Controller
         array_filter(explode('/', $p), fn($s) => $s !== '')
     );
     $base = rtrim(config('app.url') ?: url('/'), '/'); // ex: http://127.0.0.1:8000
-    return $base . '/media/' . implode('/', $segments);
+   return $base . '/storage/' . implode('/', $segments);
+
 }
 
 
