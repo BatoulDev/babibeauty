@@ -15,6 +15,10 @@ class Review extends Model
 
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
 
-    // polymorphic inverse
-    public function reviewable(): MorphTo { return $this->morphTo(); }
+    // app/Models/Review.php
+public function reviewable()
+{
+    return $this->morphTo();
+}
+
 }

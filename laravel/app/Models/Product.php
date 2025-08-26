@@ -29,26 +29,12 @@ class Product extends Model
         return $this->belongsTo(\App\Models\Category::class);
     }
 
-    protected $appends = ['image_url'];
+   // app/Models/Product.php
+public function reviews()
+{
+    return $this->morphMany(\App\Models\Review::class, 'reviewable');
+}
 
-    /**
-     * Accessor: returns a full public URL for the product image.
-     */
-    public function getImageUrlAttribute(): ?string
-    {
-        if (!$this->image_path) {
-            return null;
-        }
 
-        // If DB already stores a full URL (http/https), just return it
-        if (str_starts_with($this->image_path, 'http://') || str_starts_with($this->image_path, 'https://')) {
-            return $this->image_path;
-        }
-
-        /** @var FilesystemAdapter $disk */
-        $disk = Storage::disk('public'); // maps to storage/app/public
-
-        // Build the proper URL via /storage symlink
-        return $disk->url(ltrim($this->image_path, '/'));
-    }
+  
 }

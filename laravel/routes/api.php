@@ -28,10 +28,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('/logout-all', [AuthController::class, 'logoutAll'])->name('logout-all');
 });
 
-
-// ── Categories
-Route::apiResource('categories', CategoryController::class)->only(['index','show']);
-Route::apiResource('categories', CategoryController::class)->only(['store','update','destroy']);
+Route::apiResource('categories', CategoryController::class)->only(['index','show','store','update','destroy']);
 
 // ── Brands
 Route::apiResource('brands', BrandController::class)->only(['index','show']);

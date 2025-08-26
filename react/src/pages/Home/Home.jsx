@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import "./Home.css";
-import CategoryGrid from "../../components/CategoryGrid/CategoryGrid";
+import CategoryShowcase from "../../components/CategoryShowcase/CategoryShowcase";
 
 // ✅ import About and Contact
 import About from "../About/About";
@@ -96,9 +96,9 @@ export default function Home() {
         </div>
       </div>
 
-      {/* === Category strip just below the carousel === */}
-      <CategoryGrid title="Popular Categories" />
 
++     {/* === Categories (right under carousel) === */}
++     <CategoryShowcase />
       {/* === About Section === */}
       <About />
 

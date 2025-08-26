@@ -8,23 +8,20 @@ use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
-    // GET /api/categories?search=&page=
-    public function index(Request $request)
+  
+  
+    public function index()
     {
-        $q = Category::query();
-
-        if ($s = $request->query('search')) {
-            $q->where('name', 'like', "%{$s}%");
-        }
-
-        return $q->orderBy('name')->paginate(10);
+        return Category::select('id','name')
+            ->orderBy('name')
+            ->get();
     }
 
-    // GET /api/categories/{category}
     public function show(Category $category)
     {
-        return $category;
+        return $category->only(['id','name']);
     }
+
 
     // POST /api/categories
     public function store(Request $request)

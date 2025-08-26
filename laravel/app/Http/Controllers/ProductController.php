@@ -5,40 +5,58 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
-    /**
-     * GET /products
-     * Optional filters: ?search=iphone&brand_id=1&category_id=2&is_active=1
-     * Optional sort: ?sort=price&dir=asc
-     * Pagination: ?page=1&per_page=10
-     */
     public function index(Request $request)
     {
-        $query = Product::with(['brand','category']);
+        $products = Product::query()
+            ->select('id','name','price','image_path','category_id','brand_id','stock','is_active')
+            ->when($request->filled('category_id'),
+                fn ($qq) => $qq->where('category_id', (int) $request->category_id))
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->withAvg('reviews', 'rating')      // ->reviews_avg_rating
+            ->withCount('reviews')              // ->reviews_count
+            ->get();
 
-        if ($s = $request->query('search')) {
-            $query->where(function ($q) use ($s) {
-                $q->where('name', 'like', "%{$s}%")
-                  ->orWhere('description', 'like', "%{$s}%");
-            });
-        }
-        if ($brand = $request->query('brand_id'))    $query->where('brand_id', $brand);
-        if ($cat   = $request->query('category_id')) $query->where('category_id', $cat);
-        if (!is_null($request->query('is_active')))  $query->where('is_active', (bool)$request->query('is_active'));
+        $payload = $products->map(function ($p) {
+            return [
+                'id'            => $p->id,
+                'name'          => $p->name,
+                'price'         => (float) $p->price,
+                // always build a safe public URL (or placeholder)
+                'image_url' => $this->publicImageUrl($p->image_path),
 
-        $sort = in_array($request->query('sort'), ['name','price','stock','created_at']) ? $request->query('sort') : 'created_at';
-        $dir  = $request->query('dir') === 'asc' ? 'asc' : 'desc';
-        $query->orderBy($sort, $dir);
+                'rating'        => is_numeric($p->reviews_avg_rating ?? null)
+                                    ? round($p->reviews_avg_rating, 1)
+                                    : null,
+                'reviews_count' => (int) ($p->reviews_count ?? 0),
+            ];
+        })->values();
 
-        $perPage = (int)($request->query('per_page', 10));
-        return response()->json($query->paginate($perPage));
+        return response()->json($payload);
     }
 
-    /**
-     * POST /products
-     */
+    public function show(Product $product)
+    {
+        $product->loadAvg('reviews', 'rating')
+                ->loadCount('reviews');
+
+        return response()->json([
+            'id'            => $product->id,
+            'name'          => $product->name,
+            'price'         => (float) $product->price,
+            'image_url'     => $this->publicImageUrl($product->image_path),
+            'rating'        => is_numeric($product->reviews_avg_rating ?? null)
+                                ? round($product->reviews_avg_rating, 1)
+                                : null,
+            'reviews_count' => (int) ($product->reviews_count ?? 0),
+        ]);
+    }
+
+    /** POST /products */
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -49,24 +67,16 @@ class ProductController extends Controller
             'price'       => ['required','numeric','min:0'],
             'stock'       => ['nullable','integer','min:0'],
             'is_active'   => ['nullable','boolean'],
+            // 'image_path' => ['sometimes','string'],
         ]);
 
-        $product = Product::create($data)->load(['brand','category']);
+        $product = Product::create($data)->load(['brand:id,name','category:id,name']);
+        $product->image_url = $this->publicImageUrl($product->image_path);
 
         return response()->json($product, Response::HTTP_CREATED);
     }
 
-    /**
-     * GET /products/{product}
-     */
-    public function show(Product $product)
-    {
-        return response()->json($product->load(['brand','category']));
-    }
-
-    /**
-     * PUT/PATCH /products/{product}
-     */
+    /** PUT/PATCH /products/{product} */
     public function update(Request $request, Product $product)
     {
         $data = $request->validate([
@@ -77,19 +87,52 @@ class ProductController extends Controller
             'price'       => ['sometimes','numeric','min:0'],
             'stock'       => ['sometimes','integer','min:0'],
             'is_active'   => ['sometimes','boolean'],
+            // 'image_path' => ['sometimes','string'],
         ]);
 
         $product->update($data);
+        $product->load(['brand:id,name','category:id,name']);
+        $product->image_url = $this->publicImageUrl($product->image_path);
 
-        return response()->json($product->load(['brand','category']));
+        return response()->json($product);
     }
 
-    /**
-     * DELETE /products/{product}
-     */
+    /** DELETE /products/{product} */
     public function destroy(Product $product)
     {
         $product->delete();
-        return response()->json(['message' => 'Deleted'], Response::HTTP_NO_CONTENT);
+        // 204 must not include a body — return an empty response
+        return response()->noContent();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* helpers                                                            */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Build a usable public URL from image_path, or return a burgundy placeholder.
+     */
+  protected function publicImageUrl(?string $path): string
+{
+    if (!$path || trim($path) === '') return $this->placeholderDataUri();
+    if (preg_match('#^https?://#i', $path)) return $path;
+
+    $p = ltrim(str_replace('\\','/',$path), '/');
+    foreach (['storage/app/public/','app/public/','public/','storage/'] as $prefix) {
+        if (stripos($p, $prefix) === 0) { $p = substr($p, strlen($prefix)); break; }
+    }
+    $segments = array_map(fn($seg) =>
+        preg_match('/%[0-9A-Fa-f]{2}/', $seg) ? $seg : rawurlencode($seg),
+        array_filter(explode('/', $p), fn($s) => $s !== '')
+    );
+    $base = rtrim(config('app.url') ?: url('/'), '/'); // ex: http://127.0.0.1:8000
+    return $base . '/media/' . implode('/', $segments);
+}
+
+
+    protected function placeholderDataUri(): string
+    {
+        $svg = "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0' stop-color='#561C24'/><stop offset='1' stop-color='#6D2932'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' fill='#EEE3D1' font-family='Georgia, serif' font-size='160'>G</text></svg>";
+        return 'data:image/svg+xml;charset=UTF-8,' . rawurlencode($svg);
     }
 }
