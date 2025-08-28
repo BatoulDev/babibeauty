@@ -10,31 +10,32 @@ class BeautyExpertController extends Controller
 {
     /**
      * GET /beauty-experts
-     * Filters: ?search=maya&specialty=Makeup&is_active=1
+     * Filters: ?q=maya&specialty=Makeup&is_active=1
      * Pagination: ?page=1&per_page=10
      * Sort: ?sort=name&dir=asc
      */
     public function index(Request $request)
     {
-        $q = BeautyExpert::query();
+        $q    = trim((string) $request->query('q', ''));
+        $spec = trim((string) $request->query('specialty', ''));
+        $per  = max(6, min((int) $request->query('per_page', 12), 48));
 
-        if ($s = $request->query('search')) {
-            $q->where(function($qq) use ($s) {
-                $qq->where('name', 'like', "%{$s}%")
-                   ->orWhere('bio', 'like', "%{$s}%")
-                   ->orWhere('specialty', 'like', "%{$s}%");
-            });
-        }
+        $experts = BeautyExpert::query()
+            ->select('id','name','specialty','bio','phone','is_active','avatar_path','base_price') // 👈 add these
+            ->where('is_active', 1)
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('name', 'like', "%{$q}%")
+                      ->orWhere('specialty', 'like', "%{$q}%");
+                });
+            })
+            ->when($spec !== '', function ($qq) use ($spec) {
+                $qq->where('specialty', 'like', "%{$spec}%");
+            })
+            ->orderBy('name')
+            ->paginate($per);
 
-        if ($spec = $request->query('specialty')) $q->where('specialty', 'like', "%{$spec}%");
-        if (!is_null($request->query('is_active'))) $q->where('is_active', (bool)$request->query('is_active'));
-
-        $sort = in_array($request->query('sort'), ['name','specialty','created_at']) ? $request->query('sort') : 'created_at';
-        $dir  = $request->query('dir') === 'asc' ? 'asc' : 'desc';
-        $q->orderBy($sort, $dir);
-
-        $perPage = (int) $request->query('per_page', 10);
-        return response()->json($q->paginate($perPage));
+        return response()->json($experts);
     }
 
     /**
@@ -43,11 +44,13 @@ class BeautyExpertController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'      => ['required','string','max:255'],
-            'specialty' => ['nullable','string','max:100'],
-            'bio'       => ['nullable','string'],
-            'phone'     => ['nullable','string','max:30'],
-            'is_active' => ['nullable','boolean'],
+            'name'       => ['required','string','max:255'],
+            'specialty'  => ['nullable','string','max:100'],
+            'bio'        => ['nullable','string'],
+            'phone'      => ['nullable','string','max:30'],
+            'is_active'  => ['nullable','boolean'],
+            'avatar_path'=> ['nullable','string','max:255'], // optional
+            'base_price' => ['nullable','numeric','min:0'],  // optional
         ]);
 
         $expert = BeautyExpert::create($data);
@@ -57,9 +60,13 @@ class BeautyExpertController extends Controller
     /**
      * GET /beauty-experts/{beauty_expert}
      */
-    public function show(BeautyExpert $beauty_expert)
+    public function show(BeautyExpert $beautyExpert)
     {
-        return response()->json($beauty_expert);
+        return response()->json(
+            $beautyExpert->only([
+                'id','name','specialty','bio','phone','is_active','avatar_path','base_price' // 👈 add these
+            ])
+        );
     }
 
     /**
@@ -68,15 +75,19 @@ class BeautyExpertController extends Controller
     public function update(Request $request, BeautyExpert $beauty_expert)
     {
         $data = $request->validate([
-            'name'      => ['sometimes','string','max:255'],
-            'specialty' => ['sometimes','nullable','string','max:100'],
-            'bio'       => ['sometimes','nullable','string'],
-            'phone'     => ['sometimes','nullable','string','max:30'],
-            'is_active' => ['sometimes','boolean'],
+            'name'       => ['sometimes','string','max:255'],
+            'specialty'  => ['sometimes','nullable','string','max:100'],
+            'bio'        => ['sometimes','nullable','string'],
+            'phone'      => ['sometimes','nullable','string','max:30'],
+            'is_active'  => ['sometimes','boolean'],
+            'avatar_path'=> ['sometimes','nullable','string','max:255'],
+            'base_price' => ['sometimes','nullable','numeric','min:0'],
         ]);
 
         $beauty_expert->update($data);
-        return response()->json($beauty_expert);
+        return response()->json($beauty_expert->only([
+            'id','name','specialty','bio','phone','is_active','avatar_path','base_price'
+        ]));
     }
 
     /**

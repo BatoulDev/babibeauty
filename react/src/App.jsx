@@ -12,6 +12,10 @@ import Login from './pages/Login/Login';
 import Signup from './pages/Signup/Signup';
 import NotFound from './pages/NotFound/NotFound';
 import CategoryPage from "./pages/CategoryPage/CategoryPage";
+import ProductDetails from "./pages/ProductDetails/ProductDetails";
+import BookExpert from "./pages/BookExpert/BookExpert";
+
+
 
 // Logout page that signs out then redirects
 function Logout({ onLogout }) {
@@ -56,6 +60,11 @@ export default function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/logout" element={<Logout onLogout={handleLogout} />} />
          <Route path="/category/:id" element={<CategoryPage />} />
+                 <Route path="/product/:id" element={<ProductDetails />} />
+                 <Route path="/book" element={<BookExpert />} />
+
+
+
 
           <Route path="*" element={<NotFound />} />
         </Routes>

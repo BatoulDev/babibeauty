@@ -80,3 +80,15 @@
   0%{ background-position: -200px 0; }
   100%{ background-position: 200px 0; }
 }
+
+
+.bb-img.is-blur {
+  filter: blur(12px);
+  transform: scale(1.02);
+  background: #f7f3ed;
+}
+.bb-img.is-loaded {
+  filter: none;
+  transform: none;
+  transition: filter .25s ease, transform .25s ease;
+}

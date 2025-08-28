@@ -34,17 +34,34 @@ Route::apiResource('categories', CategoryController::class)->only(['index','show
 Route::apiResource('brands', BrandController::class)->only(['index','show']);
 Route::apiResource('brands', BrandController::class)->only(['store','update','destroy']);
 
-// ── Products
-Route::apiResource('products', ProductController::class)->only(['index','show']);
-Route::apiResource('products', ProductController::class)->only(['store','update','destroy']);
+//products
+Route::apiResource('products', ProductController::class)
+    ->only(['index','show','store','update','destroy']);
 
-// ── Beauty Experts
-Route::apiResource('beauty-experts', BeautyExpertController::class)->only(['index','show']);
-Route::apiResource('beauty-experts', BeautyExpertController::class)->only(['store','update','destroy']);
 
-//booking
-Route::apiResource('bookings', BookingController::class)->only(['index','show']);
-Route::apiResource('bookings', BookingController::class)->only(['store','update','destroy']);
+// routes/api.php
+Route::get('/beauty-experts', [BeautyExpertController::class, 'index']); // you already have
+
+// routes/api.php
+Route::get('/beauty-experts/{id}/reviews', function($id){
+    return \App\Models\Review::where('reviewable_type','App\\Models\\BeautyExpert')
+        ->where('reviewable_id', (int)$id)
+        ->latest()
+        ->select('id','rating','comment','created_at')   // keep payload light
+        ->limit(5)
+        ->get();
+});
+
+
+// routes/api.php
+Route::get('/bookings', [BookingController::class, 'index']);
+Route::get('/bookings/availability', [BookingController::class, 'availability']); // NEW
+Route::post('/bookings', [BookingController::class, 'store']);
+Route::get('/bookings/{booking}', [BookingController::class, 'show']);
+Route::match(['put','patch'],'/bookings/{booking}', [BookingController::class, 'update']);
+Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
+
+
 
 //reviews
 Route::apiResource('reviews', ReviewController::class)->only(['index','show']);

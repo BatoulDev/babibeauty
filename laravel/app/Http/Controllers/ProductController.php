@@ -40,20 +40,45 @@ class ProductController extends Controller
         return response()->json($payload);
     }
 
-    public function show(Product $product)
+   public function show(Product $product)
     {
-        $product->loadAvg('reviews', 'rating')
-                ->loadCount('reviews');
+        $product->loadMissing([
+            'brand:id,name',
+            'category:id,name',
+            // newest first; include reviewer name if you have users table
+            'reviews' => fn ($q) => $q->latest()->with('user:id,name'),
+        ])->loadAvg('reviews', 'rating')
+          ->loadCount('reviews');
+
+        // Build full image URL (works with `php artisan storage:link`)
+        $imageUrl = $product->image_path ? url(Storage::url($product->image_path)) : null;
+
+        // Optional simple srcset thumbs (adjust to your thumb route if you have one)
+        $srcset = $imageUrl
+            ? $imageUrl.' 800w'
+            : null;
 
         return response()->json([
-            'id'            => $product->id,
-            'name'          => $product->name,
-            'price'         => (float) $product->price,
-            'image_url'     => $this->publicImageUrl($product->image_path),
-            'rating'        => is_numeric($product->reviews_avg_rating ?? null)
-                                ? round($product->reviews_avg_rating, 1)
-                                : null,
-            'reviews_count' => (int) ($product->reviews_count ?? 0),
+            'id'             => $product->id,
+            'name'           => $product->name,
+            'description'    => $product->description,
+            'price'          => (float) $product->price,
+            'stock'          => (int) $product->stock,
+            'image_url'      => $imageUrl,
+            'image_srcset'   => $srcset,
+            'brand'          => $product->brand?->name,
+            'category'       => $product->category?->name,
+            'rating'         => round((float) ($product->reviews_avg_rating ?? 0), 1),
+            'reviews_count'  => (int) ($product->reviews_count ?? 0),
+
+            // map reviews
+            'reviews'        => $product->reviews->map(fn ($r) => [
+                'id'         => $r->id,
+                'user'       => $r->user->name ?? 'Guest',
+                'rating'     => (int) $r->rating,
+                'comment'    => $r->comment,
+                'created_at' => $r->created_at?->toDateTimeString(),
+            ]),
         ]);
     }
 
@@ -127,8 +152,7 @@ class ProductController extends Controller
         array_filter(explode('/', $p), fn($s) => $s !== '')
     );
     $base = rtrim(config('app.url') ?: url('/'), '/'); // ex: http://127.0.0.1:8000
-   return $base . '/storage/' . implode('/', $segments);
-
+    return $base . '/storage/' . implode('/', $segments);
 }
 
 

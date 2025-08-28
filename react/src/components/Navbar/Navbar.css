@@ -16,3 +16,19 @@
 .bb-catlink {
   flex: 0 0 auto;   /* makes each link respect horizontal scroll */
 }
+
+.bb-btn {
+  font-family: inherit;   /* same font as other links */
+  font-size: 1rem;        /* match the nav links */
+  font-weight: 500;       /* medium weight */
+  padding: 6px 14px;      /* balanced padding */
+  border-radius: 6px;     /* soft corners */
+  background-color: #5a1d26;  /* your burgundy */
+  color: #fff;
+  transition: background 0.3s ease;
+}
+
+.bb-btn:hover {
+  background-color: #7a2b35;  /* slightly lighter on hover */
+  color: #fff;
+}

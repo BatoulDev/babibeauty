@@ -1,0 +1,114 @@
+/* src/pages/ProductDetails/ProductDetails.css */
+:root{
+  --burgundy:#561C24;
+  --burgundy-2:#6D2932;
+  --wheat:#EEE8DC;      /* soft wheat */
+  --wheat-2:#F8EFE4;
+  --ink:#1b1b1b;
+  --muted:#6b6b6b;
+  --radius:18px;
+}
+
+.pd-container{
+  max-width: 1140px;
+  margin: 24px auto;
+  padding: 0 16px 56px;
+}
+
+.pd-breadcrumbs{ display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+.pd-link{ background:none; border:0; padding:0; color:var(--burgundy); cursor:pointer; font-weight:600; }
+.pd-sep{ color:#999; }
+
+.pd-grid{
+  display:grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 28px;
+}
+@media (max-width: 900px){
+  .pd-grid{ grid-template-columns: 1fr; }
+}
+
+.pd-media{
+  background: var(--wheat-2);
+  border: 1px solid #eadfce;
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.pd-img{
+  width:100%; height:auto; display:block; border-radius: 14px;
+  opacity:.0; transition:opacity .25s ease;
+}
+.pd-img.is-loaded{ opacity:1; }
+
+.pd-info{
+  background: #fff;
+  border: 1px solid #f0e6d8;
+  border-radius: var(--radius);
+  padding: 22px;
+}
+.pd-title{
+  margin:0 0 8px; font-size: clamp(22px, 3.2vw, 32px);
+  line-height:1.15; color: var(--burgundy);
+}
+.pd-meta{ display:flex; flex-wrap:wrap; gap:8px; margin: 6px 0 10px; }
+.pd-chip{
+  font-size: 12px; padding:6px 10px; border-radius:999px;
+  background: var(--wheat); color:#4b2a2a; border:1px solid #e6d9c7;
+}
+
+.pd-rating{ display:flex; align-items:center; gap:10px; margin: 10px 0 14px; }
+.pd-rcount{ color:#777; font-size:14px; }
+
+.pd-price{
+  font-weight:800; font-size: clamp(22px, 3vw, 28px);
+  color: var(--burgundy-2); margin: 6px 0 14px;
+}
+
+.pd-desc{ color:var(--ink); line-height:1.6; }
+
+.pd-actions{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
+.pd-btn{
+  padding:12px 16px; border-radius:12px; border:1px solid var(--burgundy);
+  font-weight:700; cursor:pointer;
+}
+.pd-primary{ background: var(--burgundy); color:#fff; }
+.pd-ghost{ background: transparent; color: var(--burgundy); }
+
+.pd-reviews{ margin-top: 34px; }
+.pd-rev-head{ display:flex; align-items:end; justify-content:space-between; margin-bottom:14px; color:wheat;}
+.pd-rev-score{ display:flex; align-items:baseline; gap:8px; }
+.pd-score-num{ font-weight:800; font-size:30px; color:var(--burgundy); }
+.pd-score-text{ color:#666; }
+
+.pd-empty{ color:#777; }
+
+.pd-rev-list{ list-style:none; margin:0; padding:0; display:grid; gap:12px; }
+.pd-rev-item{
+  border: 1px solid #efe5d6; border-radius:12px; background:#fff;
+  padding:14px 16px;
+}
+.pd-rev-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.pd-rev-user{ font-weight:700; color:#3b1f1f; }
+.pd-rev-stars{ opacity:.95; }
+.pd-rev-comment{ margin:8px 0 6px; color:#2a2a2a; line-height:1.5; }
+.pd-rev-date{ color:#8c8c8c; font-size:12px; }
+
+/* loading + error */
+.pd-skel{ height: 60vh; background: linear-gradient(90deg,#f5efe4,#f9f2e9 40%,#f5efe4 60%); border-radius:12px; }
+.pd-error{ color:#b00020; background:#ffe9ec; border:1px solid #ffc7cf; padding:12px; border-radius:12px; }
+
+.bb-btn-link {
+  text-decoration: none;     /* يشيل underline */
+  background: #561C24;       /* burgundy */
+  color: #EEE3D1;            /* wheat */
+  padding: 10px 18px;
+  border-radius: 8px;
+  display: inline-block;
+  font-weight: 600;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.25);  /* shadow ثابت ورا الزر */
+}
+
+.bb-btn-link:hover {
+  background: #6e2630;        /* لون أغمق شوي وقت hover */
+  box-shadow: 0 6px 14px rgba(0,0,0,0.3); /* shadow أكبر شوي */
+}

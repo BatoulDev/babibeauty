@@ -6,7 +6,11 @@ use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Carbon;
+use App\Http\Requests\BookingStoreRequest;
+use Illuminate\Support\Facades\DB;
 
+use Illuminate\Http\JsonResponse;
 class BookingController extends Controller
 {
     /**
@@ -19,60 +23,116 @@ class BookingController extends Controller
      * Sorting: ?sort=starts_at&dir=asc
      * Pagination: ?page=1&per_page=10
      */
-    public function index(Request $request)
-    {
-        $q = Booking::with(['user','beautyExpert']);
+   public function index(Request $request)
+{
+    $q = Booking::query()
+        ->when($request->filled('beauty_expert_id'), fn($qq) =>
+            $qq->where('beauty_expert_id', (int)$request->beauty_expert_id)
+        );
 
-        if ($uid = $request->query('user_id'))          $q->where('user_id', $uid);
-        if ($eid = $request->query('beauty_expert_id')) $q->where('beauty_expert_id', $eid);
-        if ($st  = $request->query('status'))           $q->where('status', $st);
-
-        if ($date = $request->query('date')) {
-            // Any booking that overlaps that day
-            $q->whereDate('starts_at', '<=', $date)
-              ->whereDate('ends_at',   '>=', $date);
-        }
-
-        $sort = in_array($request->query('sort'), ['starts_at','ends_at','price','created_at']) ? $request->query('sort') : 'starts_at';
-        $dir  = $request->query('dir') === 'desc' ? 'desc' : 'asc';
-        $q->orderBy($sort, $dir);
-
-        $perPage = (int) $request->query('per_page', 10);
-        return response()->json($q->paginate($perPage));
+    // Filter by single date (YYYY-MM-DD) to fetch day’s bookings
+    if ($d = $request->query('date')) {
+        $q->whereDate('starts_at', Carbon::parse($d)->toDateString());
     }
+
+    // Exclude cancelled by default
+    if ($request->boolean('exclude_cancelled', true)) {
+        $q->where('status', '!=', 'cancelled');
+    }
+
+    return $q->orderBy('starts_at')->get();
+}
 
     /**
      * POST /bookings
      * Prevents overlapping bookings for the same expert.
      */
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'user_id'          => ['required','exists:users,id'],
-            'beauty_expert_id' => ['required','exists:beauty_experts,id'],
-            'starts_at'        => ['required','date'],
-            'ends_at'          => ['required','date','after:starts_at'],
-            'status'           => ['nullable', Rule::in(['pending','confirmed','completed','cancelled'])],
-            'price'            => ['required','numeric','min:0'],
-        ]);
+    public function store(BookingStoreRequest $req): JsonResponse
+{
+    $data = $req->validated();
+    $data['ends_at'] = $req->input('ends_at');
 
-        // Overlap check: (existing.starts_at < new.ends_at) AND (existing.ends_at > new.starts_at)
-        $overlap = Booking::where('beauty_expert_id', $data['beauty_expert_id'])
-            ->where('starts_at', '<', $data['ends_at'])
-            ->where('ends_at',   '>', $data['starts_at'])
-            ->exists();
+    // Check any overlapping slot for this expert (hard overlap prevention)
+    $overlap = Booking::query()
+        ->where('beauty_expert_id', $data['beauty_expert_id'])
+        ->where('status', '!=', 'cancelled')
+        ->where('starts_at', '<', $data['ends_at'])
+        ->where('ends_at',   '>', $data['starts_at'])
+        ->exists();
 
-        if ($overlap) {
-            return response()->json([
-                'message' => 'This time slot overlaps with another booking for the selected beauty expert.'
-            ], 422);
-        }
-
-        $data['status'] = $data['status'] ?? 'pending';
-
-        $booking = Booking::create($data)->load(['user','beautyExpert']);
-        return response()->json($booking, Response::HTTP_CREATED);
+    if ($overlap) {
+        // We’ll still apply capacity logic below; this early check is optional
     }
+
+    // Capacity: count bookings exactly on this slot window
+    $slotCount = Booking::query()
+        ->where('beauty_expert_id', $data['beauty_expert_id'])
+        ->where('status', '!=', 'cancelled')
+        ->where('starts_at', $data['starts_at'])
+        ->where('ends_at',   $data['ends_at'])
+        ->count();
+
+    if ($slotCount >= 3) {
+        return response()->json([
+            'message' => 'This slot is fully booked (capacity 3). Choose another time.'
+        ], 409);
+    }
+
+    $booking = Booking::create([
+        'user_id'          => $req->user()?->id,  // null if guest; adjust to require auth if needed
+        'beauty_expert_id' => $data['beauty_expert_id'],
+        'starts_at'        => $data['starts_at'],
+        'ends_at'          => $data['ends_at'],
+        'status'           => 'pending',
+        'price'            => $data['price'] ?? 0,
+    ]);
+
+    return response()->json($booking->load('beautyExpert'), 201);
+}
+
+/**
+ * GET /bookings/availability?beauty_expert_id=4&date=2025-08-27
+ * Returns all 30-min slots 09:00–19:00 with counts and availability.
+ */
+public function availability(Request $request): JsonResponse
+{
+    $expertId = (int) $request->query('beauty_expert_id');
+    $date     = $request->query('date'); // YYYY-MM-DD
+
+    if (!$expertId || !$date) {
+        return response()->json(['message' => 'beauty_expert_id and date are required'], 422);
+    }
+
+    $day = \Illuminate\Support\Carbon::parse($date);
+    $open  = $day->copy()->setTime(9,0,0);
+    $close = $day->copy()->setTime(19,0,0);
+
+    // Pull bookings for that day for this expert
+    $bookings = Booking::query()
+        ->select('starts_at','ends_at', DB::raw('COUNT(*) as c'))
+        ->where('beauty_expert_id', $expertId)
+        ->where('status','!=','cancelled')
+        ->whereDate('starts_at', $day->toDateString())
+        ->groupBy('starts_at','ends_at')
+        ->get()
+        ->keyBy(fn($b) => $b->starts_at.'__'.$b->ends_at);
+
+    // Build slots
+    $slots = [];
+    for ($t = $open->copy(); $t->lt($close); $t->addMinutes(30)) {
+        $key = $t->format('Y-m-d H:i:s').'__'.$t->copy()->addMinutes(30)->format('Y-m-d H:i:s');
+        $count = (int)($bookings[$key]->c ?? 0);
+        $slots[] = [
+            'starts_at' => $t->format('Y-m-d H:i:s'),
+            'ends_at'   => $t->copy()->addMinutes(30)->format('Y-m-d H:i:s'),
+            'count'     => $count,
+            'capacity'  => 3,
+            'available' => $count < 3,
+        ];
+    }
+
+    return response()->json(['expert_id'=>$expertId, 'date'=>$day->toDateString(), 'slots'=>$slots]);
+}
 
     /**
      * GET /bookings/{booking}

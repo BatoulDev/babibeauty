@@ -29,27 +29,22 @@ class ReviewController extends Controller
      * Sorting: ?sort=created_at|rating & ?dir=asc|desc
      * Pagination: ?page=1&per_page=10
      */
-    public function index(Request $request)
-    {
-        $q = Review::with(['user','reviewable']);
+   public function index(Request $request)
+{
+    $q = Review::query();
 
-        // Filter by target
-        [$class, $rid] = $this->extractTarget($request);
-        if ($class && $rid) {
-            $q->where('reviewable_type', $class)->where('reviewable_id', $rid);
-        }
-
-        if ($uid = $request->query('user_id')) $q->where('user_id', $uid);
-        if ($min = $request->query('min'))     $q->where('rating', '>=', (int)$min);
-        if ($max = $request->query('max'))     $q->where('rating', '<=', (int)$max);
-
-        $sort = in_array($request->query('sort'), ['created_at','rating']) ? $request->query('sort') : 'created_at';
-        $dir  = $request->query('dir') === 'asc' ? 'asc' : 'desc';
-        $q->orderBy($sort, $dir);
-
-        $perPage = (int) $request->query('per_page', 10);
-        return response()->json($q->paginate($perPage));
+    // polymorphic filter
+    $type = $request->query('type');  // 'beauty_expert' | 'product'
+    if ($type === 'beauty_expert') {
+        $q->where('reviewable_type', BeautyExpert::class);
     }
+
+    if ($request->filled('reviewable_id')) {
+        $q->where('reviewable_id', (int)$request->reviewable_id);
+    }
+
+    return $q->orderByDesc('id')->paginate(10);
+}
 
     /**
      * POST /reviews

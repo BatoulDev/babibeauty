@@ -1,3 +1,4 @@
+// src/components/Navbar/Navbar.jsx
 import { NavLink, Link } from "react-router-dom";
 import logo from "../../assets/images/logo.png";
 import "./Navbar.css";
@@ -9,7 +10,7 @@ export default function Navbar({ isAuthenticated }) {
   return (
     <nav className="navbar navbar-expand-lg sticky-top border-bottom custom-navbar navbar-dark">
       <div className="container-fluid px-3 px-lg-4">
-        {/* Brand (single Link — no nested anchors) */}
+        {/* Brand */}
         <Link to="/" className="navbar-brand d-flex align-items-center">
           <img
             src={logo}
@@ -35,7 +36,7 @@ export default function Navbar({ isAuthenticated }) {
         </button>
 
         <div className="collapse navbar-collapse fs-5" id="mainNavbar">
-          {/* Right-side nav (one UL only; each item is a LI) */}
+          {/* Right-side nav */}
           <ul className="navbar-nav ms-auto align-items-lg-center gap-2 gap-lg-3">
             <li className="nav-item">
               <NavLink to="/" end className={linkCls}>
@@ -53,6 +54,13 @@ export default function Navbar({ isAuthenticated }) {
               </NavLink>
             </li>
 
+            {/* 🆕 Book Experts */}
+            <li className="nav-item">
+            <NavLink to="/book" className="btn bb-btn">Book an Expert</NavLink>
+
+
+            </li>
+
             {isAuthenticated ? (
               <>
                 <li className="nav-item">
@@ -62,7 +70,6 @@ export default function Navbar({ isAuthenticated }) {
                   </NavLink>
                 </li>
                 <li className="nav-item">
-                  {/* If logout is a route, keep NavLink; if it's an action, make it a <button> */}
                   <NavLink to="/logout" className="btn btn-outline-danger btn-sm">
                     <i className="bi bi-box-arrow-right me-1" />
                     Logout
