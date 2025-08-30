@@ -53,14 +53,20 @@ Route::get('/beauty-experts/{id}/reviews', function($id){
 });
 
 
-// routes/api.php
-Route::get('/bookings', [BookingController::class, 'index']);
-Route::get('/bookings/availability', [BookingController::class, 'availability']); // NEW
-Route::post('/bookings', [BookingController::class, 'store']);
-Route::get('/bookings/{booking}', [BookingController::class, 'show']);
-Route::match(['put','patch'],'/bookings/{booking}', [BookingController::class, 'update']);
-Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
 
+Route::prefix('bookings')->group(function () {
+    // public
+    Route::get('/',                [BookingController::class, 'index']);
+    Route::get('/availability',    [BookingController::class, 'availability']);
+    Route::get('/{booking}',       [BookingController::class, 'show']);
+
+    // write ops (auth)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/',                   [BookingController::class, 'store']);
+        Route::match(['put','patch'],'/{booking}', [BookingController::class, 'update']);
+        Route::delete('/{booking}',        [BookingController::class, 'destroy']);
+    });
+});
 
 
 //reviews

@@ -56,7 +56,7 @@ export default function Navbar({ isAuthenticated }) {
 
             {/* 🆕 Book Experts */}
             <li className="nav-item">
-            <NavLink to="/book" className="btn bb-btn">Book an Expert</NavLink>
+            <NavLink to="/experts/book" className="btn bb-btn">Book an Expert</NavLink>
 
 
             </li>

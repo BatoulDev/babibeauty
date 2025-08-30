@@ -1,6 +1,6 @@
 // src/hooks/useCategories.js
 import { useEffect, useState } from "react";
-import { cached, fetchJson } from "../utils/api";
+import { cached } from "../utils/api";
 
 // Show these immediately so first-time visitors don't wait.
 const FALLBACK = [
@@ -20,11 +20,11 @@ export function useCategories() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let alive = true;               // avoid setState after unmount/HMR
+    let alive = true; // avoid setState after unmount/HMR
     setLoading(true);
     setError("");
 
-    cached("categories", () => fetchJson("/api/categories"))
+    cached("/categories") // uses api.js cached()
       .then((list) => {
         if (!alive) return;
         const clean = Array.isArray(list)
@@ -41,7 +41,9 @@ export function useCategories() {
         if (alive) setLoading(false);
       });
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return { categories, loading, error };

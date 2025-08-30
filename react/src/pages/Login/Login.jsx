@@ -1,19 +1,25 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import "../Signup/Signup.css";          // ✅ reuse same styles as signup
-import glitter from "../../assets/images/glitter.jpg"; // same background
+import "../Signup/Signup.css";                          // ✅ keep your styles
+import glitter from "../../assets/images/glitter.jpg";  // ✅ same background
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
-const LOGIN_ENDPOINT = "/api/auth/login";
-const GOOGLE_REDIRECT = "/auth/google/redirect";
+// --- Config ---
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+const LOGIN_ENDPOINT = "/api/auth/login";              // ✅ token endpoint (no cookie flow)
+const GOOGLE_REDIRECT = "/auth/google/redirect";       // leave as-is if you use it
 
+// Optional admin shortcut
 const ADMIN_EMAIL = "admin@babibeauty.test";
 const ADMIN_PASS  = "Admin@12345";
+
+// Keys used elsewhere (BookExpert reads "auth_token")
+const TOKEN_KEY = "auth_token";
+const USER_KEY  = "auth_user";
 
 export default function Login() {
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm]     = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors]   = useState({});
   const [msg, setMsg]         = useState("");
@@ -33,48 +39,63 @@ export default function Login() {
     window.location.href = `${API_BASE}${GOOGLE_REDIRECT}`;
   };
 
-  const handleSubmit = async (e) => {
+  async function handleSubmit(e) {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     setMsg("");
     setErrors({});
 
     try {
-      await fetch(`${API_BASE}/sanctum/csrf-cookie`, {
-        method: "GET",
-        credentials: "include",
-      });
-
+      // ✅ TOKEN LOGIN (no cookies, no csrf call)
       const res = await fetch(`${API_BASE}${LOGIN_ENDPOINT}`, {
         method: "POST",
-        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          device_name: "web",            // optional, nice for Sanctum tokens
+        }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // shape: { message, errors? }
         if (data?.errors) setErrors(data.errors);
-        if (data?.message) setMsg(data.message);
+        setMsg(data?.message || "Login failed");
         return;
       }
 
+      // shape: { message, user, token, token_type }
+      const token = data.token;
+      const user  = data.user;
+
+      // ✅ Persist for whole app (BookExpert reads this)
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(USER_KEY, JSON.stringify(user || null));
+      if (typeof window.__setAuthToken === "function") {
+        window.__setAuthToken(token); // keep in-memory copy for current tab
+      }
+
       setMsg("Logged in successfully.");
+
+      // Keep your admin redirect logic
       if (form.email === ADMIN_EMAIL && form.password === ADMIN_PASS) {
-        navigate("/admin");
+        navigate("/admin", { replace: true });
       } else {
-        navigate("/");
+        navigate("/", { replace: true });   // or navigate("/book") if you prefer
       }
     } catch (err) {
       setMsg("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
     <div
@@ -91,13 +112,13 @@ export default function Login() {
         className="auth-card shadow-lg"
         style={{
           width: "100%",
-          maxWidth: 600,   // ⬅️ wider than before
+          maxWidth: 600,
           background: textOnB,
           borderRadius: 18,
           overflow: "hidden",
         }}
       >
-        {/* Header with back arrow + home */}
+        {/* Header */}
         <div
           style={{
             background: burgundy,

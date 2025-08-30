@@ -1,303 +1,300 @@
+// src/pages/BookExpert/BookExpert.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { get, post, ORIGIN } from "../../utils/api";
 import "./BookExpert.css";
 
-/* ------------------------------- config ------------------------------- */
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-const FILE_BASE = import.meta.env.VITE_FILE_BASE_URL || `${API_BASE}/storage`;
+/* ------------------ helpers ------------------ */
+function fmtDate(d) {
+  // YYYY-MM-DD in local time
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + dd;
+}
+function pad(n) { return String(n).padStart(2, "0"); }
 
-const api = (path, opts = {}) =>
-  fetch(
-    `${import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"}${path}`,
-    {
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      credentials: "omit",
-      ...opts,
-    }
-  ).then(async (r) => {
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      throw Object.assign(new Error(data?.message || "Request failed"), {
-        status: r.status,
-        data,
-      });
-    }
-    return data;
-  });
-
-/* ------------------------------- helpers ------------------------------ */
-function makeSlots(dateStr) {
+/** Make 09:00..18:30 every 30 minutes */
+function makeSlots() {
   const out = [];
-  const base = new Date(`${dateStr}T09:00:00`);
-  for (let i = 0; i < 20; i++) {
-    const start = new Date(base.getTime() + i * 30 * 60000);
-    const end = new Date(start.getTime() + 30 * 60000);
-    out.push({
-      label: start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      starts_at: start.toISOString().slice(0, 19).replace("T", " "),
-      ends_at: end.toISOString().slice(0, 19).replace("T", " "),
-    });
+  for (let h = 9; h <= 18; h++) {
+    out.push(pad(h) + ":00");
+    out.push(h === 18 ? "18:30" : pad(h) + ":30");
   }
   return out;
 }
+const ALL_SLOTS = makeSlots();
 
-// tiny local cache so experts render immediately
-const EXPERTS_CACHE_KEY = "experts_cache_v2";
-function readExpertsCache() {
-  try {
-    const raw = localStorage.getItem(EXPERTS_CACHE_KEY);
-    if (!raw) return null;
-    const { data } = JSON.parse(raw);
-    return Array.isArray(data) ? data : null;
-  } catch {
-    return null;
-  }
-}
-function writeExpertsCache(data) {
-  try {
-    localStorage.setItem(EXPERTS_CACHE_KEY, JSON.stringify({ at: Date.now(), data }));
-  } catch {}
+/** Compute end time HH:MM (local) from start HH:MM by adding 30 minutes */
+function endFromStart(startHHMM) {
+  if (!startHHMM) return "";
+  const parts = startHHMM.split(":");
+  const h = Number(parts[0]), m = Number(parts[1]);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  d.setMinutes(d.getMinutes() + 30);
+  return pad(d.getHours()) + ":" + pad(d.getMinutes());
 }
 
-/* ------------------------------ component ----------------------------- */
+/** Build "YYYY-MM-DD HH:MM:SS" in local time (no ISO/UTC) */
+function toLocalDateTime(dateStr, timeStr) {
+  return dateStr + " " + timeStr + ":00";
+}
+
+/** Within working hours (start time only) */
+function withinWorkingHours(timeStr) {
+  const parts = timeStr.split(":");
+  const h = Number(parts[0]), m = Number(parts[1]);
+  const mins = h * 60 + m;
+  return mins >= 9 * 60 && mins <= 18 * 60 + 30;
+}
+
+/** Avatar URL helper */
+function avatarUrl(e) {
+  if (e && e.avatar_url && typeof e.avatar_url === "string" && e.avatar_url.indexOf("http") === 0) return e.avatar_url;
+  if (e && e.avatar_path && typeof e.avatar_path === "string" && e.avatar_path.indexOf("http") === 0) return e.avatar_path;
+  if (e && e.avatar_path) return ORIGIN + "/storage/" + e.avatar_path;
+  return "https://via.placeholder.com/56x56.png?text=BE";
+}
+
 export default function BookExpert() {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-
   const [experts, setExperts] = useState([]);
-  const [selectedExpert, setSelectedExpert] = useState(null);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [slots, setSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-
-  // cache reviews per expert so they show instantly after first load
-  const [reviewsByExpert, setReviewsByExpert] = useState({});
+  const [activeId, setActiveId] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [date, setDate] = useState(fmtDate(new Date()));
+  const [taken, setTaken] = useState([]);     // array of "HH:MM"
+  const [start, setStart] = useState("");     // "HH:MM"
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
 
-  /* ---------------------------- load experts --------------------------- */
-  useEffect(() => {
-    // paint instantly from cache
-    const cached = readExpertsCache();
-    if (cached?.length) setExperts(cached);
+  const active = useMemo(function () {
+    for (let i = 0; i < experts.length; i++) {
+      if (experts[i].id === activeId) return experts[i];
+    }
+    return null;
+  }, [experts, activeId]);
 
-    // fetch fresh in background
-    let aborted = false;
-    api("/beauty-experts?per_page=50&page=1")
-      .then((res) => {
-        if (aborted) return;
-        const list = Array.isArray(res)
-          ? res
-          : Array.isArray(res.data)
-          ? res.data
-          : Array.isArray(res.results)
-          ? res.results
-          : [];
-        const active = list.filter((e) => e?.is_active === 1 || e?.is_active === true);
-        setExperts(active);
-        writeExpertsCache(active);
-
-        // prefetch reviews for first few experts so clicks feel instant
-        const idsToPrefetch = active.slice(0, 6).map((e) => e.id);
-        prefetchReviews(idsToPrefetch);
+  // Load experts
+  useEffect(function () {
+    get("/beauty-experts")
+      .then(function (r) {
+        const list = (r && r.data) ? r.data : (r || []);
+        setExperts(list);
+        if (list && list.length) setActiveId(list[0].id);
       })
-      .catch((e) => {
-        if (!cached?.length) {
-          setErr(e?.data?.message || e.message || "Failed to load specialists");
-          setExperts([]);
-        }
-      });
-    return () => {
-      aborted = true;
-    };
+      .catch(function (e) { setMsg(extract(e)); });
   }, []);
 
-  // preselect via ?expert or first available
-  useEffect(() => {
-    if (!experts.length) return;
-    const qId = Number(params.get("expert"));
-    const found = qId ? experts.find((e) => e.id === qId) : null;
-    setSelectedExpert(found || experts[0]);
+  // Load reviews
+  useEffect(function () {
+    if (!activeId) return;
+    get("/beauty-experts/" + activeId + "/reviews")
+      .then(function (arr) { setReviews(arr || []); })
+      .catch(function (e) { setMsg(extract(e)); });
+  }, [activeId]);
 
-    // also prefetch reviews for that selected expert if not already cached
-    const targetId = (found || experts[0]).id;
-    if (!reviewsByExpert[targetId]) {
-      prefetchReviews([targetId]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, experts]);
+  // Load availability
+  useEffect(function () {
+    if (!activeId || !date) return;
+    get("/bookings/availability?beauty_expert_id=" + activeId + "&date=" + date)
+      .then(function (payload) {
+        const labels = new Set();
 
-  /* ------------------------- availability + reviews -------------------- */
-  useEffect(() => {
-    if (!selectedExpert) return;
-    setSelectedSlot(null);
+        // 1) { booked: [ {starts_at, ends_at}, ... ] }
+        if (payload && Array.isArray(payload.booked)) {
+          payload.booked.forEach(function (b) {
+            if (!b || !b.starts_at || !b.ends_at) return;
+            const s = new Date(String(b.starts_at).replace(" ", "T"));
+            const e = new Date(String(b.ends_at).replace(" ", "T"));
+            for (let d = new Date(s); d < e; d.setMinutes(d.getMinutes() + 30)) {
+              labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+            }
+          });
+        }
+        // 2) { slots: [ {starts_at, ends_at, available}, ... ] } — mark full slots as taken
+        else if (payload && Array.isArray(payload.slots)) {
+          payload.slots.forEach(function (s) {
+            if (!s || s.available !== false || !s.starts_at) return;
+            const d = new Date(String(s.starts_at).replace(" ", "T"));
+            labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+          });
+        }
 
-    let aborted = false;
+        setTaken(Array.from(labels));
+      })
+      .catch(function (e) { setMsg(extract(e)); });
+  }, [activeId, date]);
 
-    api(`/bookings/availability?beauty_expert_id=${selectedExpert.id}&date=${date}`)
-      .then((res) => !aborted && setSlots(res.slots || []))
-      .catch(() => !aborted && setSlots([]));
-
-    // reviews: if not in cache, prefetch (but do not block UI)
-    if (!reviewsByExpert[selectedExpert.id]) {
-      prefetchReviews([selectedExpert.id]);
-    }
-
-    return () => {
-      aborted = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedExpert, date]);
-
-  // prefetch function (batch)
-  async function prefetchReviews(ids) {
-    const toFetch = ids.filter((id) => !reviewsByExpert[id]);
-    if (!toFetch.length) return;
-
-    // fetch in parallel but capped (avoid spamming)
-    const chunk = (arr, size) => arr.reduce((a, _, i) => (i % size ? a : [...a, arr.slice(i, i + size)]), []);
-    for (const group of chunk(toFetch, 3)) {
-      await Promise.allSettled(
-        group.map((id) =>
-          api(`/beauty-experts/${id}/reviews`)
-            .then((res) => {
-              setReviewsByExpert((prev) => ({ ...prev, [id]: res.data || res || [] }));
-            })
-            .catch(() => {
-              setReviewsByExpert((prev) => ({ ...prev, [id]: [] }));
-            })
-        )
-      );
-    }
-  }
-
-  const localSlots = useMemo(() => {
-    const ideal = makeSlots(date);
-    if (!slots?.length) {
-      return ideal.map((s) => ({ ...s, count: 0, available: true, capacity: 3 }));
-    }
-    const map = new Map(slots.map((s) => [s.starts_at, s]));
-    return ideal.map((s) => {
-      const m = map.get(s.starts_at);
-      return { ...s, count: m?.count ?? 0, available: m?.available ?? true, capacity: m?.capacity ?? 3 };
-    });
-  }, [slots, date]);
+  const end = useMemo(function () { return endFromStart(start); }, [start]);
 
   async function submit() {
-    if (!selectedExpert || !selectedSlot) return;
     setMsg("");
+    if (!active) { setMsg("Choose a beauty expert first."); return; }
+    if (!date) { setMsg("Pick a date."); return; }
+    if (!start) { setMsg("Pick a start time."); return; }
+    if (!withinWorkingHours(start)) { setMsg("Start time must be between 09:00 and 18:30."); return; }
+    if (!end) { setMsg("End time is invalid. Pick a start time again."); return; }
+
+    const starts_at = toLocalDateTime(date, start);
+    const ends_at   = toLocalDateTime(date, end);
+
+    setBusy(true);
     try {
-      await api(`/bookings`, {
-        method: "POST",
-        body: JSON.stringify({
-          beauty_expert_id: selectedExpert.id,
-          starts_at: selectedSlot.starts_at,
-          price: selectedExpert.base_price ?? 0,
-        }),
+      await post("/bookings", {
+        beauty_expert_id: active.id,
+        starts_at: starts_at,
+        ends_at: ends_at,
+        price: Number(active && active.base_price != null ? active.base_price : 0) || 0,
       });
-      setMsg("✅ Booking placed! We’ll confirm soon.");
-      api(`/bookings/availability?beauty_expert_id=${selectedExpert.id}&date=${date}`)
-        .then((res) => setSlots(res.slots || []))
-        .catch(() => {});
+      setMsg("✅ Booking created!");
+      setStart("");
+
+      // reload availability
+      get("/bookings/availability?beauty_expert_id=" + active.id + "&date=" + date)
+        .then(function (payload) {
+          const labels = new Set();
+          if (payload && Array.isArray(payload.slots)) {
+            payload.slots.forEach(function (s) {
+              if (!s || s.available !== false || !s.starts_at) return;
+              const d = new Date(String(s.starts_at).replace(" ", "T"));
+              labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+            });
+          } else if (payload && Array.isArray(payload.booked)) {
+            payload.booked.forEach(function (b) {
+              if (!b || !b.starts_at || !b.ends_at) return;
+              const s = new Date(String(b.starts_at).replace(" ", "T"));
+              const e = new Date(String(b.ends_at).replace(" ", "T"));
+              for (let d = new Date(s); d < e; d.setMinutes(d.getMinutes() + 30)) {
+                labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+              }
+            });
+          }
+          setTaken(Array.from(labels));
+        })
+        .catch(function () {});
     } catch (e) {
-      setMsg(`⚠️ ${e?.data?.message || e.message}`);
+      setMsg(extract(e));
+    } finally {
+      setBusy(false);
     }
   }
 
-  const reviews = selectedExpert ? reviewsByExpert[selectedExpert.id] || [] : [];
-
-  /* -------------------------------- UI --------------------------------- */
   return (
-    <div className="book-wrap">
-      <header className="book-top">
-        <button className="back" onClick={() => navigate(-1)} aria-label="Back">✕</button>
-        <h1>Book Appointment</h1>
+    <div className="bb-wrap">
+      <header className="bb-hero">
+        <h1>Book an Expert</h1>
+        <p>Select a specialist, choose your date & time (30-min slots).</p>
       </header>
 
-      <section className="date-strip">
-        <label htmlFor="date">Choose date</label>
-        <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </section>
+      <div className="bb-grid">
+        <section className="bb-card">
+          <h2 className="bb-h2">Experts</h2>
+          <ul className="bb-experts">
+            {experts.map(function (e) {
+              return (
+                <li
+                  key={e.id}
+                  className={"bb-expert " + (e.id === activeId ? "active" : "")}
+                  onClick={function () { setActiveId(e.id); }}
+                >
+                  <img src={avatarUrl(e)} alt={e.name} />
+                  <div className="info">
+                    <div className="name">{e.name}</div>
+                    <div className="spec">{e.specialty}</div>
+                    <div className="price">
+                      {"$" + Number(e && e.base_price != null ? e.base_price : 0).toFixed(2)}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
 
-      <section className="slots">
-        <h2>Available Slots</h2>
-        <div className="grid">
-          {localSlots.map((slot) => {
-            const disabled = !slot.available;
-            const active = selectedSlot?.starts_at === slot.starts_at;
-            return (
-              <button
-                key={slot.starts_at}
-                className={`slot ${active ? "active" : ""}`}
-                disabled={disabled}
-                onClick={() => setSelectedSlot(slot)}
-                title={disabled ? `Full (${slot.count}/${slot.capacity})` : `${slot.count}/${slot.capacity} booked`}
-              >
-                <span>{slot.label}</span>
-                <small>{slot.count}/{slot.capacity}</small>
-              </button>
-            );
-          })}
-        </div>
-      </section>
+        <section className="bb-card">
+          <h2 className="bb-h2">Schedule</h2>
 
-      {/* Specialists grid (3 per row) */}
-      <section className="experts">
-        <h2>Choose Specialist</h2>
-        {err && !experts.length ? (
-          <div className="muted" style={{ padding: "10px 4px" }}>{err}</div>
-        ) : (
-          <div className="experts-grid">
-            {experts.map((ex) => (
-              <div
-                key={ex.id}
-                role="button"
-                tabIndex={0}
-                className={`expert-card ${selectedExpert?.id === ex.id ? "sel" : ""}`}
-                onClick={() => setSelectedExpert(ex)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelectedExpert(ex)}
-                title={`${ex.name} — ${ex.specialty}`}
-              >
-                <img
-                  src={ex.avatar_path ? `${FILE_BASE}/${ex.avatar_path}` : "/placeholder-avatar.png"}
-                  alt={ex.name}
-                  loading="lazy"
-                  decoding="async"
-                  width="64"
-                  height="64"
-                />
-                <div className="meta">
-                  <b>{ex.name}</b>
-                  <span>{ex.specialty}</span>
-                </div>
+          <div className="bb-form">
+            <label>
+              Date
+              <input
+                type="date"
+                value={date}
+                min={fmtDate(new Date())}
+                onChange={function (e) { setDate(e.target.value); setStart(""); }}
+              />
+            </label>
+
+            <label>
+              Start time
+              <div className="bb-slots">
+                {ALL_SLOTS.map(function (t) {
+                  const disabled = taken.indexOf(t) !== -1;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className={"slot " + (start === t ? "chosen" : "")}
+                      disabled={disabled}
+                      onClick={function () { setStart(t); }}
+                      title={disabled ? "This time is fully booked" : "Select this time"}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
               </div>
-            ))}
+            </label>
+
+            <label>
+              End time
+              <input type="text" value={end || "--:--"} readOnly />
+            </label>
+
+            <button className="bb-submit" disabled={busy || !start} onClick={submit}>
+              {busy ? "Booking..." : "Confirm Booking"}
+            </button>
+
+            {msg ? <p className="bb-msg">{msg}</p> : null}
           </div>
-        )}
-      </section>
 
-      <section className="reviews">
-        <h2>Client Reviews</h2>
-        <ul>
-          {(reviews ?? []).map((rv) => (
-            <li key={rv.id}>
-              <div className="stars" aria-label={`${rv.rating} stars`}>
-                {"★".repeat(rv.rating)}{"☆".repeat(Math.max(0, 5 - rv.rating))}
-              </div>
-              <p>{rv.comment}</p>
-            </li>
-          ))}
-          {!reviews?.length && <li className="muted">No reviews yet.</li>}
-        </ul>
-      </section>
-
-      {msg && <div className="msg">{msg}</div>}
-
-      <footer className="cta">
-        <button className="book-btn" disabled={!selectedExpert || !selectedSlot} onClick={submit}>
-          Book Appointment
-        </button>
-      </footer>
+          <h3 className="bb-h3">Recent Reviews</h3>
+          <ul className="bb-reviews">
+            {(reviews || []).map(function (r) {
+              return (
+                <li key={r.id}>
+                  <span className="stars">{"★".repeat(r.rating) + "☆".repeat(5 - r.rating)}</span>
+                  <span className="text">{r.comment}</span>
+                  <time>{new Date(r.created_at).toLocaleDateString()}</time>
+                </li>
+              );
+            })}
+            {!(reviews && reviews.length) ? <li>No reviews yet.</li> : null}
+          </ul>
+        </section>
+      </div>
     </div>
   );
+}
+
+function extract(e) {
+  const raw = (e && e.message ? e.message : "").trim();
+  if (!raw) return "Something went wrong.";
+
+  try {
+    const asJson = JSON.parse(raw);
+    // Laravel validation errors (422)
+    if (asJson && asJson.errors) {
+      const keys = Object.keys(asJson.errors);
+      if (keys.length && Array.isArray(asJson.errors[keys[0]]) && asJson.errors[keys[0]].length) {
+        return asJson.errors[keys[0]][0];
+      }
+    }
+    if (asJson && asJson.message) return asJson.message;
+  } catch (err) {
+    // not JSON body, fall through
+  }
+
+  if (raw.indexOf("Unauthenticated") !== -1) return "⚠️ Unauthenticated — please log in.";
+  if (raw.indexOf("422") !== -1) return "⚠️ Invalid data (422). Check time/date and try again.";
+  return raw;
 }

@@ -1,51 +1,74 @@
 <?php
+
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Carbon;
-use Illuminate\Validation\Validator;
 
 class BookingStoreRequest extends FormRequest
 {
-    public function authorize(): bool { return true; } // adjust to auth if needed
+    public function authorize(): bool { return true; }
 
     public function rules(): array
     {
         return [
-            'beauty_expert_id' => ['required','exists:beauty_experts,id'],
-            'starts_at'        => ['required','date_format:Y-m-d H:i'], // we’ll derive ends_at
+            'beauty_expert_id' => ['bail','required','integer','exists:beauty_experts,id'],
+            'starts_at'        => ['bail','required','date_format:Y-m-d H:i:s'],
+            // ends_at is optional; if provided we ignore it anyway
+            'ends_at'          => ['sometimes','nullable','date_format:Y-m-d H:i:s'],
             'price'            => ['nullable','numeric','min:0'],
         ];
     }
 
-    public function withValidator(Validator $v): void
+    public function withValidator($validator): void
     {
-        $v->after(function($v){
-            $start = Carbon::createFromFormat('Y-m-d H:i', $this->input('starts_at'))->seconds(0);
+        $validator->after(function ($v) {
+            if ($v->errors()->any()) return;
 
-            // enforce 30-min grid (minutes 00 or 30)
-            if (!in_array((int)$start->minute, [0,30])) {
-                $v->errors()->add('starts_at', 'Start time must be on a 30-minute slot.');
+            $tz = config('app.timezone');
+
+            try {
+                $s = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', (string)$this->starts_at, $tz)->second(0);
+            } catch (\Throwable $ex) {
+                $v->errors()->add('starts_at', 'Invalid start date/time.');
                 return;
             }
 
-            // business hours [09:00, 19:00] (end is exclusive)
-            $open  = (clone $start)->setTime(9,0);
-            $close = (clone $start)->setTime(19,0);
+            // Enforce grid alignment :00 or :30
+            $min = (int) $s->format('i');
+            if (!in_array($min, [0,30], true)) {
+                $v->errors()->add('starts_at', 'Start must be at :00 or :30.');
+            }
 
-            $end = (clone $start)->addMinutes(30);
-            if ($start->lt($open) || $end->gt($close)) {
-                $v->errors()->add('starts_at', 'Bookings allowed 09:00–19:00 (30 min).');
+            // Working hours 09:00–19:00 (latest usable start = 18:30)
+            $date  = $s->toDateString();
+            $open  = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', "$date 09:00:00", $tz);
+            $close = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', "$date 19:00:00", $tz);
+            $end   = $s->copy()->addMinutes(30)->second(0);
+            if ($s->lt($open) || $end->gt($close)) {
+                $v->errors()->add('starts_at', 'Outside working hours (09:00–19:00).');
+            }
+
+            // Capacity: max 3 bookings at the same starts_at (exclude cancelled)
+            if (!$v->errors()->any()) {
+                $capacity = 3;
+                $countAtStart = \App\Models\Booking::where('beauty_expert_id', (int)$this->beauty_expert_id)
+                    ->where('starts_at', $s->format('Y-m-d H:i:s'))
+                    ->whereIn('status', ['pending','confirmed'])
+                    ->count();
+
+                if ($countAtStart >= $capacity) {
+                    $v->errors()->add('starts_at', 'This time is full. Choose another slot.');
+                }
             }
         });
     }
 
-    public function passedValidation(): void
+    public function attributes(): array
     {
-        // Make ends_at available to controller
-        $start = \Illuminate\Support\Carbon::createFromFormat('Y-m-d H:i', $this->input('starts_at'))->seconds(0);
-        $this->merge(['ends_at' => $start->copy()->addMinutes(30)->format('Y-m-d H:i:s')]);
-        $this->merge(['starts_at' => $start->format('Y-m-d H:i:s')]);
+        return [
+            'beauty_expert_id' => 'beauty expert',
+            'starts_at'        => 'start time',
+            'ends_at'          => 'end time',
+        ];
     }
 }
-
