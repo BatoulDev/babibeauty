@@ -8,13 +8,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
-    /**
-     * POST /api/register
-     */
+    /** POST /api/register */
     public function register(RegisterRequest $request): JsonResponse
     {
         $data = $request->validated();
@@ -25,7 +22,6 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
         ]);
 
-        // Name the token after the client/device for easier debugging
         $deviceName = $request->input('device_name') ?: ($request->userAgent() ?: 'api');
         $token = $user->createToken($deviceName, ['*'])->plainTextToken;
 
@@ -42,9 +38,7 @@ class AuthController extends Controller
         ], 201);
     }
 
-    /**
-     * POST /api/login
-     */
+    /** POST /api/auth/login */
     public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
@@ -53,7 +47,7 @@ class AuthController extends Controller
             'device_name' => ['nullable','string','max:255'],
         ]);
 
-        if (! Auth::attempt(['email' => $credentials['email'], 'password' => $credentials['password']])) {
+        if (!Auth::attempt(['email' => $credentials['email'], 'password' => $credentials['password']])) {
             return response()->json(['message' => 'Invalid login details'], 401);
         }
 
@@ -73,46 +67,36 @@ class AuthController extends Controller
             ],
             'token'      => $token,
             'token_type' => 'Bearer',
-        ], 200);
-    }
-
-    /**
-     * GET /api/me   (auth:sanctum)
-     */
-    public function me(Request $request): JsonResponse
-    {
-        $user = $request->user();
-
-        return response()->json([
-            'id'       => $user->id,
-            'name'     => $user->name,
-            'email'    => $user->email,
-            'is_admin' => (bool) ($user->is_admin ?? false),
         ]);
     }
 
-    /**
-     * POST /api/logout   (auth:sanctum)
-     * Revokes the current access token only.
-     */
+    /** GET /api/me (auth:sanctum) */
+    public function me(Request $request): JsonResponse
+    {
+        $u = $request->user();
+
+        return response()->json([
+            'id'       => $u->id,
+            'name'     => $u->name,
+            'email'    => $u->email,
+            'is_admin' => (bool) ($u->is_admin ?? false),
+        ]);
+    }
+
+    /** POST /api/logout (auth:sanctum) */
     public function logout(Request $request): JsonResponse
     {
         $token = $request->user()?->currentAccessToken();
-        if ($token) {
-            $token->delete();
-        }
+        if ($token) $token->delete();
 
-        return response()->json(['message' => 'Logged out'], 200);
+        return response()->json(['message' => 'Logged out']);
     }
 
-    /**
-     * POST /api/logout-all   (auth:sanctum)
-     * Revokes ALL tokens for the user.
-     */
+    /** POST /api/logout-all (auth:sanctum) */
     public function logoutAll(Request $request): JsonResponse
     {
         $request->user()->tokens()->delete();
 
-        return response()->json(['message' => 'Logged out from all devices'], 200);
+        return response()->json(['message' => 'Logged out from all devices']);
     }
 }

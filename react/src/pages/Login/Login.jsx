@@ -1,25 +1,27 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import "../Signup/Signup.css";                          // ✅ keep your styles
-import glitter from "../../assets/images/glitter.jpg";  // ✅ same background
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import "../Signup/Signup.css";
+import glitter from "../../assets/images/glitter.jpg";
+import { setToken } from "../../utils/api"; // ✅ use global token setter
 
 // --- Config ---
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
-const LOGIN_ENDPOINT = "/api/auth/login";              // ✅ token endpoint (no cookie flow)
-const GOOGLE_REDIRECT = "/auth/google/redirect";       // leave as-is if you use it
+const LOGIN_ENDPOINT = "/api/auth/login";
+const GOOGLE_REDIRECT = "/auth/google/redirect";
 
 // Optional admin shortcut
 const ADMIN_EMAIL = "admin@babibeauty.test";
 const ADMIN_PASS  = "Admin@12345";
 
 // Keys used elsewhere (BookExpert reads "auth_token")
-const TOKEN_KEY = "auth_token";
 const USER_KEY  = "auth_user";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation(); // ✅ to return user to intended page
+  const redirectTo = location?.state?.redirectTo || "/"; // fallback home
 
-  const [form, setForm]     = useState({ email: "", password: "" });
+  const [form, setForm]       = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors]   = useState({});
   const [msg, setMsg]         = useState("");
@@ -48,47 +50,44 @@ export default function Login() {
     setErrors({});
 
     try {
-      // ✅ TOKEN LOGIN (no cookies, no csrf call)
+      // ✅ Token login (Sanctum personal access token)
       const res = await fetch(`${API_BASE}${LOGIN_ENDPOINT}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "application/json",
+          "Accept": "application/json",
         },
         body: JSON.stringify({
           email: form.email,
           password: form.password,
-          device_name: "web",            // optional, nice for Sanctum tokens
+          device_name: "web",
         }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // shape: { message, errors? }
         if (data?.errors) setErrors(data.errors);
         setMsg(data?.message || "Login failed");
         return;
       }
 
-      // shape: { message, user, token, token_type }
+      // Expected shape: { message, user, token, token_type }
       const token = data.token;
       const user  = data.user;
 
-      // ✅ Persist for whole app (BookExpert reads this)
-      localStorage.setItem(TOKEN_KEY, token);
+      // ✅ Persist token globally (localStorage + in-memory via api.js)
+      setToken(token);
       localStorage.setItem(USER_KEY, JSON.stringify(user || null));
-      if (typeof window.__setAuthToken === "function") {
-        window.__setAuthToken(token); // keep in-memory copy for current tab
-      }
 
       setMsg("Logged in successfully.");
 
-      // Keep your admin redirect logic
+      // Optional admin fast-lane
       if (form.email === ADMIN_EMAIL && form.password === ADMIN_PASS) {
         navigate("/admin", { replace: true });
       } else {
-        navigate("/", { replace: true });   // or navigate("/book") if you prefer
+        // ✅ Go back where the user came from (e.g. /products/:id)
+        navigate(redirectTo, { replace: true });
       }
     } catch (err) {
       setMsg("Network error. Please try again.");

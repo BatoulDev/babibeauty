@@ -14,6 +14,10 @@ import NotFound from './pages/NotFound/NotFound';
 import CategoryPage from "./pages/CategoryPage/CategoryPage";
 import ProductDetails from "./pages/ProductDetails/ProductDetails";
 import BookExpert from "./pages/BookExpert/BookExpert";
+import Cart from "./pages/Cart/Cart";
+import Checkout from "./pages/Checkout/Checkout";
+
+
 
 const TOKEN_KEY = 'auth_token';
 
@@ -111,7 +115,9 @@ export default function App() {
           <Route path="/product/:id" element={<ProductDetails />} />
 
           <Route path="/experts/book" element={<BookExpert/>} />
-
+         <Route path="/cart" element={<Cart />} />
+         <Route path="/checkout" element={<Checkout />} />
+         
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

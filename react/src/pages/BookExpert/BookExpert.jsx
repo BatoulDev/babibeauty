@@ -1,11 +1,10 @@
 // src/pages/BookExpert/BookExpert.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { get, post, ORIGIN } from "../../utils/api";
+import { ORIGIN, post, cachedLocal, prefetch, fetchJson } from "../../utils/api";
 import "./BookExpert.css";
 
 /* ------------------ helpers ------------------ */
 function fmtDate(d) {
-  // YYYY-MM-DD in local time
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -13,7 +12,6 @@ function fmtDate(d) {
 }
 function pad(n) { return String(n).padStart(2, "0"); }
 
-/** Make 09:00..18:30 every 30 minutes */
 function makeSlots() {
   const out = [];
   for (let h = 9; h <= 18; h++) {
@@ -24,35 +22,27 @@ function makeSlots() {
 }
 const ALL_SLOTS = makeSlots();
 
-/** Compute end time HH:MM (local) from start HH:MM by adding 30 minutes */
 function endFromStart(startHHMM) {
   if (!startHHMM) return "";
-  const parts = startHHMM.split(":");
-  const h = Number(parts[0]), m = Number(parts[1]);
+  const [h, m] = startHHMM.split(":").map(Number);
   const d = new Date();
   d.setHours(h, m, 0, 0);
   d.setMinutes(d.getMinutes() + 30);
   return pad(d.getHours()) + ":" + pad(d.getMinutes());
 }
 
-/** Build "YYYY-MM-DD HH:MM:SS" in local time (no ISO/UTC) */
-function toLocalDateTime(dateStr, timeStr) {
-  return dateStr + " " + timeStr + ":00";
-}
+function toLocalDateTime(dateStr, timeStr) { return dateStr + " " + timeStr + ":00"; }
 
-/** Within working hours (start time only) */
 function withinWorkingHours(timeStr) {
-  const parts = timeStr.split(":");
-  const h = Number(parts[0]), m = Number(parts[1]);
+  const [h, m] = timeStr.split(":").map(Number);
   const mins = h * 60 + m;
   return mins >= 9 * 60 && mins <= 18 * 60 + 30;
 }
 
-/** Avatar URL helper */
 function avatarUrl(e) {
-  if (e && e.avatar_url && typeof e.avatar_url === "string" && e.avatar_url.indexOf("http") === 0) return e.avatar_url;
-  if (e && e.avatar_path && typeof e.avatar_path === "string" && e.avatar_path.indexOf("http") === 0) return e.avatar_path;
-  if (e && e.avatar_path) return ORIGIN + "/storage/" + e.avatar_path;
+  if (e?.avatar_url?.startsWith?.("http")) return e.avatar_url;
+  if (e?.avatar_path?.startsWith?.("http")) return e.avatar_path;
+  if (e?.avatar_path) return ORIGIN + "/storage/" + e.avatar_path;
   return "https://via.placeholder.com/56x56.png?text=BE";
 }
 
@@ -66,73 +56,93 @@ export default function BookExpert() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const active = useMemo(function () {
-    for (let i = 0; i < experts.length; i++) {
-      if (experts[i].id === activeId) return experts[i];
-    }
-    return null;
-  }, [experts, activeId]);
+  const active = useMemo(() => experts.find(e => e.id === activeId) || null, [experts, activeId]);
 
-  // Load experts
-  useEffect(function () {
-    get("/beauty-experts")
-      .then(function (r) {
-        const list = (r && r.data) ? r.data : (r || []);
+  /* ---------- Experts: cached + prefetch reviews for first few ---------- */
+  useEffect(() => {
+    cachedLocal("/beauty-experts", 300000)
+      .then((r) => {
+        const list = r?.data || r || [];
         setExperts(list);
-        if (list && list.length) setActiveId(list[0].id);
+        if (list?.length) {
+          setActiveId(list[0].id);
+          list.slice(0, 5).forEach((e) => prefetch(`/api/beauty-experts/${e.id}/reviews`));
+        }
       })
-      .catch(function (e) { setMsg(extract(e)); });
+      .catch((e) => setMsg(extract(e)));
   }, []);
 
-  // Load reviews
-  useEffect(function () {
+  /* ---------------- Reviews: cached, robust to shape ---------------- */
+  useEffect(() => {
     if (!activeId) return;
-    get("/beauty-experts/" + activeId + "/reviews")
-      .then(function (arr) { setReviews(arr || []); })
-      .catch(function (e) { setMsg(extract(e)); });
+
+    // helper that accepts either [] or {data: []}
+    function normalizeReviews(payload) {
+      return Array.isArray(payload) ? payload : (payload?.data || []);
+    }
+
+    // try the canonical /api path (LS cached)
+    cachedLocal(`/api/beauty-experts/${activeId}/reviews`, 300000)
+      .then((payload) => {
+        setReviews(normalizeReviews(payload));
+      })
+      .catch(async (e) => {
+        // fallback: non-/api path in case server is mounted differently
+        try {
+          const payload = await cachedLocal(`/beauty-experts/${activeId}/reviews`, 300000);
+          setReviews(normalizeReviews(payload));
+        } catch (e2) {
+          setMsg(extract(e2));
+        }
+      });
   }, [activeId]);
 
-  // Load availability
-  useEffect(function () {
+  /* --------------- Availability: fresh, cancel stale requests --------------- */
+  useEffect(() => {
     if (!activeId || !date) return;
-    get("/bookings/availability?beauty_expert_id=" + activeId + "&date=" + date)
-      .then(function (payload) {
+    const ctrl = new AbortController();
+
+    fetchJson(`/api/bookings/availability?beauty_expert_id=${activeId}&date=${date}`, { signal: ctrl.signal })
+      .then((payload) => {
         const labels = new Set();
 
-        // 1) { booked: [ {starts_at, ends_at}, ... ] }
-        if (payload && Array.isArray(payload.booked)) {
-          payload.booked.forEach(function (b) {
-            if (!b || !b.starts_at || !b.ends_at) return;
+        if (Array.isArray(payload?.booked)) {
+          payload.booked.forEach((b) => {
+            if (!b?.starts_at || !b?.ends_at) return;
             const s = new Date(String(b.starts_at).replace(" ", "T"));
             const e = new Date(String(b.ends_at).replace(" ", "T"));
             for (let d = new Date(s); d < e; d.setMinutes(d.getMinutes() + 30)) {
               labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
             }
           });
-        }
-        // 2) { slots: [ {starts_at, ends_at, available}, ... ] } — mark full slots as taken
-        else if (payload && Array.isArray(payload.slots)) {
-          payload.slots.forEach(function (s) {
-            if (!s || s.available !== false || !s.starts_at) return;
-            const d = new Date(String(s.starts_at).replace(" ", "T"));
-            labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+        } else if (Array.isArray(payload?.slots)) {
+          payload.slots.forEach((s) => {
+            if (s?.available === false && s?.starts_at) {
+              const d = new Date(String(s.starts_at).replace(" ", "T"));
+              labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+            }
           });
         }
 
         setTaken(Array.from(labels));
       })
-      .catch(function (e) { setMsg(extract(e)); });
+      .catch((e) => {
+        if (e?.name === "AbortError") return;
+        setMsg(extract(e));
+      });
+
+    return () => ctrl.abort();
   }, [activeId, date]);
 
-  const end = useMemo(function () { return endFromStart(start); }, [start]);
+  const end = useMemo(() => endFromStart(start), [start]);
 
   async function submit() {
     setMsg("");
-    if (!active) { setMsg("Choose a beauty expert first."); return; }
-    if (!date) { setMsg("Pick a date."); return; }
-    if (!start) { setMsg("Pick a start time."); return; }
-    if (!withinWorkingHours(start)) { setMsg("Start time must be between 09:00 and 18:30."); return; }
-    if (!end) { setMsg("End time is invalid. Pick a start time again."); return; }
+    if (!active) return setMsg("Choose a beauty expert first.");
+    if (!date) return setMsg("Pick a date.");
+    if (!start) return setMsg("Pick a start time.");
+    if (!withinWorkingHours(start)) return setMsg("Start time must be between 09:00 and 18:30.");
+    if (!end) return setMsg("End time is invalid. Pick a start time again.");
 
     const starts_at = toLocalDateTime(date, start);
     const ends_at   = toLocalDateTime(date, end);
@@ -141,26 +151,27 @@ export default function BookExpert() {
     try {
       await post("/bookings", {
         beauty_expert_id: active.id,
-        starts_at: starts_at,
-        ends_at: ends_at,
-        price: Number(active && active.base_price != null ? active.base_price : 0) || 0,
+        starts_at,
+        ends_at,
+        price: Number(active?.base_price ?? 0) || 0,
       });
       setMsg("✅ Booking created!");
       setStart("");
 
-      // reload availability
-      get("/bookings/availability?beauty_expert_id=" + active.id + "&date=" + date)
-        .then(function (payload) {
+      // refresh availability fresh
+      fetchJson(`/api/bookings/availability?beauty_expert_id=${active.id}&date=${date}`)
+        .then((payload) => {
           const labels = new Set();
-          if (payload && Array.isArray(payload.slots)) {
-            payload.slots.forEach(function (s) {
-              if (!s || s.available !== false || !s.starts_at) return;
-              const d = new Date(String(s.starts_at).replace(" ", "T"));
-              labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+          if (Array.isArray(payload?.slots)) {
+            payload.slots.forEach((s) => {
+              if (s?.available === false && s?.starts_at) {
+                const d = new Date(String(s.starts_at).replace(" ", "T"));
+                labels.add(pad(d.getHours()) + ":" + pad(d.getMinutes()));
+              }
             });
-          } else if (payload && Array.isArray(payload.booked)) {
-            payload.booked.forEach(function (b) {
-              if (!b || !b.starts_at || !b.ends_at) return;
+          } else if (Array.isArray(payload?.booked)) {
+            payload.booked.forEach((b) => {
+              if (!b?.starts_at || !b?.ends_at) return;
               const s = new Date(String(b.starts_at).replace(" ", "T"));
               const e = new Date(String(b.ends_at).replace(" ", "T"));
               for (let d = new Date(s); d < e; d.setMinutes(d.getMinutes() + 30)) {
@@ -170,7 +181,7 @@ export default function BookExpert() {
           }
           setTaken(Array.from(labels));
         })
-        .catch(function () {});
+        .catch(() => {});
     } catch (e) {
       setMsg(extract(e));
     } finally {
@@ -179,34 +190,30 @@ export default function BookExpert() {
   }
 
   return (
-    <div className="bb-wrap">
-      <header className="bb-hero">
-        <h1>Book an Expert</h1>
-        <p>Select a specialist, choose your date & time (30-min slots).</p>
-      </header>
-
+   <div className="bb-wrap bb-page-book">   {/* <-- add bb-page-book */}
+    <header className="bb-minihero">       {/* <-- NOT bb-hero */}
+      <h1>Book an Expert</h1>
+      <p>Select a specialist, choose your date & time (30-min slots).</p>
+    </header>
       <div className="bb-grid">
         <section className="bb-card">
           <h2 className="bb-h2">Experts</h2>
           <ul className="bb-experts">
-            {experts.map(function (e) {
-              return (
-                <li
-                  key={e.id}
-                  className={"bb-expert " + (e.id === activeId ? "active" : "")}
-                  onClick={function () { setActiveId(e.id); }}
-                >
-                  <img src={avatarUrl(e)} alt={e.name} />
-                  <div className="info">
-                    <div className="name">{e.name}</div>
-                    <div className="spec">{e.specialty}</div>
-                    <div className="price">
-                      {"$" + Number(e && e.base_price != null ? e.base_price : 0).toFixed(2)}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
+            {experts.map((e) => (
+              <li
+                key={e.id}
+                className={"bb-expert " + (e.id === activeId ? "active" : "")}
+                onClick={() => setActiveId(e.id)}
+                onMouseEnter={() => prefetch(`/api/beauty-experts/${e.id}/reviews`)}
+              >
+                <img loading="lazy" src={avatarUrl(e)} alt={e.name} />
+                <div className="info">
+                  <div className="name">{e.name}</div>
+                  <div className="spec">{e.specialty}</div>
+                  <div className="price">{"$" + Number(e?.base_price ?? 0).toFixed(2)}</div>
+                </div>
+              </li>
+            ))}
           </ul>
         </section>
 
@@ -220,22 +227,22 @@ export default function BookExpert() {
                 type="date"
                 value={date}
                 min={fmtDate(new Date())}
-                onChange={function (e) { setDate(e.target.value); setStart(""); }}
+                onChange={(e) => { setDate(e.target.value); setStart(""); }}
               />
             </label>
 
             <label>
               Start time
               <div className="bb-slots">
-                {ALL_SLOTS.map(function (t) {
-                  const disabled = taken.indexOf(t) !== -1;
+                {ALL_SLOTS.map((t) => {
+                  const disabled = taken.includes(t);
                   return (
                     <button
                       key={t}
                       type="button"
                       className={"slot " + (start === t ? "chosen" : "")}
                       disabled={disabled}
-                      onClick={function () { setStart(t); }}
+                      onClick={() => setStart(t)}
                       title={disabled ? "This time is fully booked" : "Select this time"}
                     >
                       {t}
@@ -259,15 +266,13 @@ export default function BookExpert() {
 
           <h3 className="bb-h3">Recent Reviews</h3>
           <ul className="bb-reviews">
-            {(reviews || []).map(function (r) {
-              return (
-                <li key={r.id}>
-                  <span className="stars">{"★".repeat(r.rating) + "☆".repeat(5 - r.rating)}</span>
-                  <span className="text">{r.comment}</span>
-                  <time>{new Date(r.created_at).toLocaleDateString()}</time>
-                </li>
-              );
-            })}
+            {(reviews || []).map((r) => (
+              <li key={r.id}>
+                <span className="stars">{"★".repeat(r.rating) + "☆".repeat(5 - r.rating)}</span>
+                <span className="text">{r.comment}</span>
+                <time>{new Date(r.created_at).toLocaleDateString()}</time>
+              </li>
+            ))}
             {!(reviews && reviews.length) ? <li>No reviews yet.</li> : null}
           </ul>
         </section>
@@ -277,24 +282,21 @@ export default function BookExpert() {
 }
 
 function extract(e) {
-  const raw = (e && e.message ? e.message : "").trim();
+  const raw = (e?.message || "").trim();
   if (!raw) return "Something went wrong.";
 
   try {
     const asJson = JSON.parse(raw);
-    // Laravel validation errors (422)
-    if (asJson && asJson.errors) {
+    if (asJson?.errors) {
       const keys = Object.keys(asJson.errors);
       if (keys.length && Array.isArray(asJson.errors[keys[0]]) && asJson.errors[keys[0]].length) {
         return asJson.errors[keys[0]][0];
       }
     }
-    if (asJson && asJson.message) return asJson.message;
-  } catch (err) {
-    // not JSON body, fall through
-  }
+    if (asJson?.message) return asJson.message;
+  } catch {}
 
-  if (raw.indexOf("Unauthenticated") !== -1) return "⚠️ Unauthenticated — please log in.";
-  if (raw.indexOf("422") !== -1) return "⚠️ Invalid data (422). Check time/date and try again.";
+  if (raw.includes("Unauthenticated")) return "⚠️ Unauthenticated — please log in.";
+  if (raw.includes("422")) return "⚠️ Invalid data (422). Check time/date and try again.";
   return raw;
 }

@@ -1,9 +1,11 @@
 // src/pages/ProductDetails/ProductDetails.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, NavLink, useNavigate } from "react-router-dom";
-import { fetchJson } from "../../utils/api";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { fetchJson, post } from "../../utils/api";   // 👈 use helpers
 import RatingStars from "../../components/RatingStars/RatingStars";
 import "./ProductDetails.css";
+
+// No need for ORIGIN/API_ROOT when using api helpers
 
 function SpeedyImage({ src, srcSet, alt }) {
   const [loaded, setLoaded] = useState(false);
@@ -27,9 +29,10 @@ function SpeedyImage({ src, srcSet, alt }) {
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
+  const [data, setData]   = useState(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
+  const [err, setErr]     = useState("");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -42,13 +45,27 @@ export default function ProductDetails() {
     return () => { alive = false; };
   }, [id]);
 
-  if (loading) {
-    return <div className="pd-container"><div className="pd-skel" /></div>;
-  }
-  if (err) {
-    return <div className="pd-container"><div className="pd-error">{err}</div></div>;
-  }
-  if (!data) return null;
+  // ADD → POST /api/cart via helper (adds Accept + Bearer automatically)
+  const handleAddToCart = async () => {
+    if (!data) return;
+    try {
+      setAdding(true);
+      await post("/cart", { product_id: Number(id), quantity: 1 });
+      navigate("/cart");
+    } catch (e) {
+      if (e.status === 401) {
+        navigate("/login", { state: { redirectTo: `/products/${id}` } });
+        return;
+      }
+      alert(e?.message || "Failed to add to cart");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (loading) return <div className="pd-container"><div className="pd-skel" /></div>;
+  if (err)     return <div className="pd-container"><div className="pd-error">{err}</div></div>;
+  if (!data)   return null;
 
   const {
     name, description, price, image_url, image_srcset,
@@ -59,7 +76,6 @@ export default function ProductDetails() {
     <div className="pd-container">
       <nav className="pd-breadcrumbs">
         <button className="pd-link" onClick={() => navigate(-1)}>← Back</button>
-        
       </nav>
 
       <div className="pd-grid">
@@ -85,8 +101,12 @@ export default function ProductDetails() {
           <p className="pd-desc">{description || "No description available."}</p>
 
           <div className="pd-actions">
-            <button className="pd-btn pd-primary">Purchase</button>
-            <button className="pd-btn pd-ghost" onClick={() => navigate(-1)}>Continue Shopping</button>
+            <button className="pd-btn pd-primary" onClick={handleAddToCart} disabled={adding}>
+              {adding ? "Adding..." : "Add to cart"}
+            </button>
+            <button className="pd-btn pd-ghost" onClick={() => navigate(-1)}>
+              Continue Shopping
+            </button>
           </div>
         </div>
       </div>

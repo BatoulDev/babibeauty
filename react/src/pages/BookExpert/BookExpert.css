@@ -1,78 +1,78 @@
-/* src/pages/BookExpert/BookExpert.css */
-
+/* ===== Book Expert page (scoped) ===== */
 :root{
   --burgundy:#561C24;
   --wheat:#EEE3D1;
   --ink:#1b1b1b;
 }
 
-/* tighter page padding */
-.bb-wrap{max-width:1100px;margin:0 auto;padding:12px 16px}
+/* only style .bb-wrap when it's the Book page */
+.bb-page-book.bb-wrap{max-width:1100px;margin:0 auto;padding:12px 16px}
 
-/* make the hero compact */
-.bb-hero{
+/* compact header just for BookExpert */
+.bb-page-book .bb-minihero{
   background: linear-gradient(to right, var(--burgundy), #6f2b32);
   color:#fff;
   border-radius:12px;
-  padding:12px 16px;        /* ↓ was 22px 24px */
-  margin:8px 0 12px;        /* ↓ was 18px bottom only */
-  height:auto;              /* collapse to content */
-  min-height:0;             /* prevent tall default blocks */
+  padding:12px 16px;
+  margin:8px 0 12px;
+  height:auto; min-height:0;
 }
-.bb-hero h1{
-  margin:0;                 /* remove extra top/bottom space */
-  font-weight:800;
-  font-size:24px;           /* smaller heading */
-  line-height:1.2;
+.bb-page-book .bb-minihero h1{
+  margin:0; font-weight:800; font-size:24px; line-height:1.2;
 }
-.bb-hero p{
-  margin:4px 0 0;           /* small gap under the title */
-  opacity:.95;
-  font-size:.95rem;
+.bb-page-book .bb-minihero p{
+  margin:4px 0 0; opacity:.95; font-size:.95rem;
 }
 
-.bb-grid{display:grid;grid-template-columns:1fr 2fr;gap:12px} /* tighter gap */
-.bb-card{
+/* layout */
+.bb-page-book .bb-grid{display:grid;grid-template-columns:1fr 2fr;gap:12px}
+.bb-page-book .bb-card{
   background:var(--wheat);border-radius:16px;padding:14px;
   box-shadow:0 10px 24px rgba(0,0,0,.06);
 }
-.bb-h2{margin:0 0 8px;color:var(--burgundy)}
-.bb-h3{margin-top:14px;color:var(--burgundy)}
+.bb-page-book .bb-h2{margin:0 0 8px;color:var(--burgundy)}
+.bb-page-book .bb-h3{margin-top:14px;color:var(--burgundy)}
 
-.bb-experts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;max-height:540px;overflow:auto}
-.bb-expert{display:flex;gap:12px;align-items:center;padding:10px;border-radius:12px;background:#fff;cursor:pointer;border:2px solid transparent}
-.bb-expert.active{border-color:var(--burgundy);box-shadow:0 6px 16px rgba(86,28,36,.15)}
-.bb-expert img{width:56px;height:56px;border-radius:50%;object-fit:cover;background:#f5f5f5}
-.bb-expert .name{font-weight:700}
-.bb-expert .spec{font-size:.9rem;color:#6a6a6a}
-.bb-expert .price{margin-left:auto;font-weight:700;color:var(--burgundy)}
+/* experts list */
+.bb-page-book .bb-experts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;max-height:540px;overflow:auto}
+.bb-page-book .bb-expert{display:flex;gap:12px;align-items:center;padding:10px;border-radius:12px;background:#fff;cursor:pointer;border:2px solid transparent}
+.bb-page-book .bb-expert.active{border-color:var(--burgundy);box-shadow:0 6px 16px rgba(86,28,36,.15)}
+.bb-page-book .bb-expert img{width:56px;height:56px;border-radius:50%;object-fit:cover;background:#f5f5f5}
+.bb-page-book .bb-expert .name{font-weight:700}
+.bb-page-book .bb-expert .spec{font-size:.9rem;color:#6a6a6a}
+.bb-page-book .bb-expert .price{margin-left:auto;font-weight:700;color:var(--burgundy)}
 
-.bb-form{display:grid;gap:10px}
-.bb-form label{display:block;font-weight:700;color:var(--ink)}
-.bb-form input[type="date"], .bb-form input[readonly]{
+/* form & slots */
+.bb-page-book .bb-form{display:grid;gap:10px}
+.bb-page-book .bb-form label{display:block;font-weight:700;color:var(--ink)}
+.bb-page-book .bb-form input[type="date"],
+.bb-page-book .bb-form input[readonly]{
   width:100%;padding:10px;border-radius:10px;border:1px solid #d9d4c8;background:#fff
 }
 
-.bb-slots{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.bb-slots .slot{
+.bb-page-book .bb-slots{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.bb-page-book .bb-slots .slot{
   border:1px solid var(--burgundy);background:#fff;color:var(--burgundy);
   padding:8px 10px;border-radius:999px;font-weight:700
 }
-.bb-slots .slot:hover{filter:brightness(.98)}
-.bb-slots .slot[disabled]{opacity:.35;cursor:not-allowed}
-.bb-slots .slot.chosen{background:var(--burgundy);color:#fff}
+.bb-page-book .bb-slots .slot:hover{filter:brightness(.98)}
+.bb-page-book .bb-slots .slot[disabled]{opacity:.35;cursor:not-allowed}
+.bb-page-book .bb-slots .slot.chosen{background:var(--burgundy);color:#fff}
 
-.bb-submit{
+/* submit */
+.bb-page-book .bb-submit{
   background:var(--burgundy);color:#fff;border:0;border-radius:12px;
   padding:10px 12px;font-weight:800
 }
-.bb-submit:disabled{opacity:.6}
+.bb-page-book .bb-submit:disabled{opacity:.6}
 
-.bb-reviews{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:8px}
-.bb-reviews .stars{color:#d29b0a;margin-right:8px}
-.bb-reviews time{color:#777;margin-left:8px;font-size:.85rem}
-.bb-msg{margin:8px 0 0;color:#7a2b31;font-weight:700}
+/* reviews */
+.bb-page-book .bb-reviews{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:8px}
+.bb-page-book .bb-reviews .stars{color:#d29b0a;margin-right:8px}
+.bb-page-book .bb-reviews time{color:#777;margin-left:8px;font-size:.85rem}
+.bb-page-book .bb-msg{margin:8px 0 0;color:#7a2b31;font-weight:700}
 
+/* responsive */
 @media (max-width: 920px){
-  .bb-grid{grid-template-columns:1fr;}
+  .bb-page-book .bb-grid{grid-template-columns:1fr;}
 }

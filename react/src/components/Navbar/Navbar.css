@@ -1,34 +1,83 @@
+/* Import the wordmark font */
+@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap');
+
 /* =========================================================
    THEME / GLOBAL (Navbar)
    ========================================================= */
-
-/* Navbar */
 .custom-navbar {
   background-color: #6D2932 !important;
 }
+
+/* Wordmark back to the old look */
+.bb-wordmark{
+  font-family: "Syncopate", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  line-height: 1;
+  font-size: 28px;
+  color: #fff;
+}
+
+/* Links (all nav items share the same style now) */
 .custom-navbar .nav-link,
-.custom-navbar .navbar-brand {
-  color: #ffffff !important;
+.custom-navbar .navbar-brand { color: #ffffff !important; }
+
+.custom-navbar .nav-link {
+  opacity: .95;
+  border-radius: .375rem;         /* subtle rounding, no pill bg */
+  transition: color .2s ease, opacity .2s ease;
 }
-.custom-navbar .nav-link:hover {
+
+/* Hover/focus: only color change, NO background */
+.custom-navbar .nav-link:hover,
+.custom-navbar .nav-link:focus {
   color: #eee8dc !important;
-}
-.bb-catlink {
-  flex: 0 0 auto;   /* makes each link respect horizontal scroll */
+  opacity: 1;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
+/* Active: stronger text, still no background */
+.custom-navbar .nav-link.active {
+  color: #fff !important;
+  font-weight: 700;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Brand buttons (Login/Signup) keep their look */
 .bb-btn {
-  font-family: inherit;   /* same font as other links */
-  font-size: 1rem;        /* match the nav links */
-  font-weight: 500;       /* medium weight */
-  padding: 6px 14px;      /* balanced padding */
-  border-radius: 6px;     /* soft corners */
-  background-color: #5a1d26;  /* your burgundy */
-  color: #fff;
-  transition: background 0.3s ease;
+  background-color: #5a1d26 !important;
+  border-color: #5a1d26 !important;
+  color: #fff !important;
+  font-size: 1rem;
+  padding: .5rem 1rem;
+  border-radius: .5rem;
+}
+.bb-btn:hover,
+.bb-btn:focus {
+  background-color: #7a2b35 !important;
+  border-color: #7a2b35 !important;
+  color: #fff !important;
+  box-shadow: none !important;
 }
 
-.bb-btn:hover {
-  background-color: #7a2b35;  /* slightly lighter on hover */
-  color: #fff;
+/* Outline button (Login) */
+.bb-btn-outline {
+  background: transparent !important;
+  border-color: #eee8dc !important;
+  color: #eee8dc !important;
+  font-size: 1rem;
+  padding: .5rem 1rem;
+  border-radius: .5rem;
 }
+.bb-btn-outline:hover,
+.bb-btn-outline:focus {
+  background-color: #eee8dc !important;
+  color: #6D2932 !important;
+  box-shadow: none !important;
+}
+
+/* Category links utility (unchanged) */
+.bb-catlink { flex: 0 0 auto; }
