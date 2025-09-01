@@ -1,5 +1,3 @@
-// src/utils/api.js
-
 /* ------------------ API Root ------------------ */
 export const ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 export const API = ORIGIN + "/api";
@@ -34,39 +32,39 @@ function apiUrl(path) {
   return API + (path.charAt(0) === "/" ? path : ("/" + path));
 }
 function baseHeaders(extra) {
-  var merged = Object.assign({ Accept: "application/json" }, authHeaders());
-  if (extra) merged = Object.assign(merged, extra);
+  let merged = { Accept: "application/json", ...authHeaders() };
+  if (extra) merged = { ...merged, ...extra };
   return merged;
 }
 
 function firstValidationError(errors) {
   if (!errors) return null;
-  var keys = Object.keys(errors);
+  const keys = Object.keys(errors);
   if (!keys.length) return null;
-  var arr = errors[keys[0]];
+  const arr = errors[keys[0]];
   if (Array.isArray(arr) && arr.length) return arr[0];
   return null;
 }
 
 /** Parse body once, handle 204, surface Laravel 422 nicely */
 async function handle(res) {
-  var text = "";
-  try { text = await res.text(); } catch (e) {}
-  var data = null;
+  let text = "";
+  try { text = await res.text(); } catch {}
+  let data = null;
   if (text) {
-    try { data = JSON.parse(text); } catch (e) {}
+    try { data = JSON.parse(text); } catch {}
   }
 
   if (!res.ok) {
-    var message = null;
+    let message = null;
     if (data && data.errors) {
-      var fv = firstValidationError(data.errors);
+      const fv = firstValidationError(data.errors);
       if (fv) message = fv;
     }
     if (!message && data && data.message) message = data.message;
     if (!message) message = text || res.statusText;
 
-    var err = new Error(message);
+    const err = new Error(message);
     err.status = res.status;
     err.data = data;
     throw err;
@@ -77,13 +75,15 @@ async function handle(res) {
 }
 
 async function req(method, path, body, extraHeaders) {
-  var init = {
-    method: method,
-    headers: baseHeaders(body != null ? Object.assign({ "Content-Type": "application/json" }, extraHeaders || {}) : (extraHeaders || {})),
-    credentials: WITH_CREDENTIALS ? "include" : "omit"
+  const init = {
+    method,
+    headers: baseHeaders(body != null ? { "Content-Type": "application/json", ...(extraHeaders || {}) } : (extraHeaders || {})),
+    credentials: WITH_CREDENTIALS ? "include" : "omit",
+    // IMPORTANT: don't kill HTTP caching on GETs
+    ...(method === "GET" ? { cache: "default" } : {}),
   };
   if (body != null) init.body = JSON.stringify(body);
-  var res = await fetch(apiUrl(path), init);
+  const res = await fetch(apiUrl(path), init);
   return handle(res);
 }
 
@@ -100,10 +100,18 @@ export async function del(path)         { return req("DELETE", path); }
  *  - "products" or "/products"     -> ${ORIGIN}/api/products
  *  - "/api/products"               -> ${ORIGIN}/api/products
  *  - "https://..."                 -> absolute URL untouched
+ *
+ * Options:
+ *  - params: { k: v } to be appended as query string
+ *  - timeout: ms (default 10000)
+ *  - cache: (let browser decide; don't set "no-store" unless you must)
  */
-export async function fetchJson(path, init) {
-  init = init || {};
-  var url;
+const INFLIGHT = new Map(); // key -> Promise
+function makeKey(method, url) { return `${method} ${url}`; }
+
+export async function fetchJson(path, init = {}) {
+  // build URL
+  let url;
   if (path.indexOf("http") === 0) {
     url = path;
   } else if (path.indexOf("/api") === 0) {
@@ -112,9 +120,58 @@ export async function fetchJson(path, init) {
     url = apiUrl(path);
   }
 
-  var headers = baseHeaders(init.headers || {});
-  var res = await fetch(url, Object.assign({}, init, { headers: headers, credentials: WITH_CREDENTIALS ? "include" : "omit" }));
-  return handle(res);
+  // merge params into URL if provided
+  if (init.params && typeof init.params === "object") {
+    const usp = new URL(url, window.location.origin);
+    for (const [k, v] of Object.entries(init.params)) {
+      if (v !== undefined && v !== null) usp.searchParams.set(k, String(v));
+    }
+    url = usp.toString();
+  }
+
+  const method = (init.method || "GET").toUpperCase();
+  const headers = baseHeaders(init.headers || {});
+  const credentials = WITH_CREDENTIALS ? "include" : "omit";
+
+  // default timeout for fetch (abort after X ms)
+  const timeoutMs = typeof init.timeout === "number" ? init.timeout : 10000;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let timeoutId = null;
+  if (controller && timeoutMs > 0) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  }
+
+  // GET de-duplication: share in-flight identical GETs
+  const canDedupe = method === "GET" && !init.body;
+  const inflightKey = canDedupe ? makeKey(method, url) : null;
+  if (canDedupe && INFLIGHT.has(inflightKey)) {
+    return INFLIGHT.get(inflightKey);
+  }
+
+  const fetchInit = {
+    ...init,
+    method,
+    headers,
+    credentials,
+    // don’t override cache unless caller explicitly sets it
+    cache: init.cache || "default",
+    signal: controller ? controller.signal : undefined,
+  };
+
+  // Never pass our custom keys down
+  delete fetchInit.params;
+  delete fetchInit.timeout;
+
+  const p = fetch(url, fetchInit)
+    .then((res) => handle(res))
+    .finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (inflightKey) INFLIGHT.delete(inflightKey);
+    });
+
+  if (inflightKey) INFLIGHT.set(inflightKey, p);
+
+  return p;
 }
 
 /* ------------------ Simple in-memory cache ------------------ */
@@ -125,12 +182,12 @@ const CACHE = new Map();
  */
 export async function cached(path, ttlMs) {
   if (typeof ttlMs !== "number") ttlMs = 60000;
-  var key = "GET " + path;
-  var now = Date.now();
-  var hit = CACHE.get(key);
+  const key = "GET " + path;
+  const now = Date.now();
+  const hit = CACHE.get(key);
   if (hit && (now - hit.time) < ttlMs) return hit.data;
 
-  var data;
+  let data;
   if (path.indexOf("http") === 0 || path.indexOf("/api") === 0) {
     data = await fetchJson(path);
   } else {
@@ -142,35 +199,34 @@ export async function cached(path, ttlMs) {
 }
 
 /* ------------------ localStorage cache + prefetch ------------------ */
-function _cacheKey(path) {
-  var full =
-    path.indexOf("http") === 0
-      ? path
-      : path.indexOf("/api") === 0
-      ? ORIGIN + path
-      : apiUrl(path);
-  return "L1::" + full;
+function _fullUrl(path) {
+  return path.indexOf("http") === 0
+    ? path
+    : path.indexOf("/api") === 0
+    ? ORIGIN + path
+    : apiUrl(path);
 }
+function _cacheKey(path) { return "L1::" + _fullUrl(path); }
 
 /** Read-through cache stored in localStorage (default TTL 5 min) */
 export async function cachedLocal(path, ttlMs) {
   ttlMs = typeof ttlMs === "number" ? ttlMs : 300000;
-  var key = _cacheKey(path);
+  const key = _cacheKey(path);
   try {
-    var raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(key);
     if (raw) {
-      var rec = JSON.parse(raw);
+      const rec = JSON.parse(raw);
       if (Date.now() - rec.t < ttlMs) return rec.d;
     }
-  } catch (e) {}
-  var data = await fetchJson(path);
-  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data })); } catch (e) {}
+  } catch {}
+  const data = await fetchJson(path);
+  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data })); } catch {}
   return data;
 }
 
 /** Fire-and-forget warm-up */
 export function prefetch(path) {
-  return cachedLocal(path, 300000).then(function () {});
+  return cachedLocal(path, 300000).then(() => {});
 }
 
 /* ------------------ Media helper ------------------ */

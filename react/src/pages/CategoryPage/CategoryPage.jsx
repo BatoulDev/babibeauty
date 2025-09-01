@@ -4,6 +4,8 @@ import { useParams, NavLink } from "react-router-dom";
 import { fetchJson } from "../../utils/api";
 import RatingStars from "../../components/RatingStars/RatingStars";
 import "./CategoryPage.css";
+import { readPrefetchedCategoryFirstPage } from "../../utils/prefetch";
+import { prefetchProductDetails } from "../../utils/prefetch";
 
 /* ---------------- helpers ---------------- */
 
@@ -55,8 +57,8 @@ function SpeedyImage({ src, srcSet, sizes, alt, index }) {
 /* ---------------- page ---------------- */
 
 export default function CategoryPage() {
-  const { id } = useParams();                 // /category/:id
-  const catId = Number(id) || "";             // normalize (avoid "undefined")
+  const { id } = useParams(); // /category/:id
+  const catId = Number(id);
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -66,35 +68,41 @@ export default function CategoryPage() {
   const loadingRef = useRef(false);
   const sentinelRef = useRef(null);
 
+  const parseResponse = (res, pageNum) => {
+    const data = res?.data ?? res ?? [];
+    const arr = Array.isArray(data) ? data : [];
+    const currentPage = Number(res?.current_page ?? res?.meta?.current_page ?? pageNum);
+    const lastPage = Number(res?.last_page ?? res?.meta?.last_page ?? pageNum);
+    return { arr, hasMore: currentPage < lastPage };
+  };
+
   const loadPage = useCallback(async (pageNum) => {
-    if (loadingRef.current || !catId) return;
+    if (loadingRef.current) return;
+    if (!Number.isFinite(catId) || catId <= 0) {
+      setErr("Invalid category id.");
+      setLoading(false);
+      return;
+    }
+
     loadingRef.current = true;
     setLoading(true);
     try {
-      // 🔑 Build query string explicitly (don’t rely on fetchJson params)
+      // small first paint + lite payload
       const qs = new URLSearchParams({
         category_id: String(catId),
         page: String(pageNum),
-        per_page: "24",
+        per_page: pageNum === 1 ? "12" : "24",
+        lite: "1",
       }).toString();
 
       const res = await fetchJson(`/api/products?${qs}`);
-
-      // Support both paginated and raw arrays
-      const data = res?.data ?? res?.items ?? res ?? [];
-      const arr = Array.isArray(data) ? data : [];
+      const { arr, hasMore } = parseResponse(res, pageNum);
 
       setItems((prev) => (pageNum === 1 ? arr : prev.concat(arr)));
-
-      // Determine pagination
-      const lastPage =
-        res?.last_page ??
-        res?.meta?.last_page ??
-        (res?.links ? (res?.links?.next ? pageNum + 1 : pageNum) : pageNum);
-
-      setHasMore(pageNum < Number(lastPage));
+      setHasMore(Boolean(hasMore));
+      setErr("");
     } catch (e) {
-      setErr(e?.message || "Failed to fetch");
+      setErr(e?.message || "Failed to fetch products.");
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -107,7 +115,20 @@ export default function CategoryPage() {
     setPage(1);
     setHasMore(true);
     setErr("");
-    window.scrollTo({ top: 0, behavior: "instant" });
+    try { window.scrollTo({ top: 0, behavior: "instant" }); } catch {}
+
+    // If we have prefetched data for this category, paint immediately
+    const pref = readPrefetchedCategoryFirstPage(catId);
+    if (pref) {
+      const data = pref?.data ?? pref ?? [];
+      const arr = Array.isArray(data) ? data : [];
+      setItems(arr);
+      setLoading(false);
+      // Revalidate in the background to keep fresh
+      setTimeout(() => loadPage(1), 0);
+      return;
+    }
+
     loadPage(1);
   }, [catId, loadPage]);
 
@@ -173,9 +194,18 @@ export default function CategoryPage() {
               <div className="bb-price">
                 {p.skeleton ? "\u00A0" : `$${Number(p.price ?? 0).toFixed(2)}`}
               </div>
-              <button className="bb-btn" disabled={p.skeleton}>
-                <NavLink to={`/product/${p.id}`} className="bb-btn-link">See Details</NavLink>
-              </button>
+              {!p.skeleton && (
+                <NavLink
+  to={`/product/${p.id}`}
+  state={{ pre: { id: p.id, name: p.name, price: p.price, image_url: p.image_url } }}
+  className="bb-btn bb-btn-link"
+  onMouseEnter={() => prefetchProductDetails(p.id)}
+  onTouchStart={() => prefetchProductDetails(p.id)}
+  onFocus={() => prefetchProductDetails(p.id)}
+>
+  See Details
+</NavLink>
+              )}
             </div>
           </article>
         ))}

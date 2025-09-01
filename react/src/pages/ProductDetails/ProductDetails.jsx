@@ -1,11 +1,10 @@
 // src/pages/ProductDetails/ProductDetails.jsx
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { fetchJson, post } from "../../utils/api";   // 👈 use helpers
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { fetchJson, post } from "../../utils/api";
+import { readPrefetchedProductDetails } from "../../utils/prefetch";
 import RatingStars from "../../components/RatingStars/RatingStars";
 import "./ProductDetails.css";
-
-// No need for ORIGIN/API_ROOT when using api helpers
 
 function SpeedyImage({ src, srcSet, alt }) {
   const [loaded, setLoaded] = useState(false);
@@ -29,21 +28,46 @@ function SpeedyImage({ src, srcSet, alt }) {
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [data, setData]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr]     = useState("");
+  const location = useLocation();
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);   // only true on cold path
+  const [err, setErr] = useState("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     setErr("");
+
+    const numericId = Number(id);
+
+    // 1) Try Link state (from category card) or prefetch cache first (instant paint)
+    const fromState = location.state?.pre || null;
+    const fromCache = readPrefetchedProductDetails(numericId);
+
+    if (fromCache || fromState) {
+      if (!alive) return;
+      // Use cached data; if only state is available, it's minimal but good enough to paint
+      setData(fromCache || { ...fromState });
+      setLoading(false);
+
+      // 2) Revalidate in the background (doesn't block UI)
+      fetchJson(`/api/products/${id}`)
+        .then((res) => { if (alive) setData(res); })
+        .catch(() => { /* ignore revalidate errors silently */ });
+
+      return () => { alive = false; };
+    }
+
+    // 3) Cold path (no state/cache) — do a single fetch
+    setLoading(true);
     fetchJson(`/api/products/${id}`)
       .then((res) => { if (alive) setData(res); })
       .catch((e) => { if (alive) setErr(e?.message || "Failed to load product"); })
       .finally(() => { if (alive) setLoading(false); });
+
     return () => { alive = false; };
-  }, [id]);
+  }, [id, location.state]);
 
   // ADD → POST /api/cart via helper (adds Accept + Bearer automatically)
   const handleAddToCart = async () => {
@@ -54,7 +78,8 @@ export default function ProductDetails() {
       navigate("/cart");
     } catch (e) {
       if (e.status === 401) {
-        navigate("/login", { state: { redirectTo: `/products/${id}` } });
+        // fix path: your details route is /product/:id (singular)
+        navigate("/login", { state: { redirectTo: `/product/${id}` } });
         return;
       }
       alert(e?.message || "Failed to add to cart");
@@ -63,13 +88,22 @@ export default function ProductDetails() {
     }
   };
 
+  // Cold path skeleton (shows only when we had neither state nor cache)
   if (loading) return <div className="pd-container"><div className="pd-skel" /></div>;
   if (err)     return <div className="pd-container"><div className="pd-error">{err}</div></div>;
   if (!data)   return null;
 
   const {
-    name, description, price, image_url, image_srcset,
-    brand, category, rating, reviews_count, reviews = []
+    name,
+    description,
+    price,
+    image_url,
+    image_srcset,
+    brand,
+    category,
+    rating,
+    reviews_count,
+    reviews = [],
   } = data;
 
   return (
@@ -92,7 +126,7 @@ export default function ProductDetails() {
           </div>
 
           <div className="pd-rating">
-            <RatingStars value={rating ?? 0} count={reviews_count ?? 0} />
+            <RatingStars value={Number.isFinite(rating) ? rating : 0} count={reviews_count ?? 0} />
             {reviews_count ? <span className="pd-rcount">({reviews_count})</span> : null}
           </div>
 
@@ -115,7 +149,7 @@ export default function ProductDetails() {
         <div className="pd-rev-head">
           <h2>Customer Reviews</h2>
           <div className="pd-rev-score">
-            <span className="pd-score-num">{(rating ?? 0).toFixed(1)}</span>
+            <span className="pd-score-num">{(Number.isFinite(rating) ? rating : 0).toFixed(1)}</span>
             <span className="pd-score-text">out of 5</span>
           </div>
         </div>
@@ -131,7 +165,11 @@ export default function ProductDetails() {
                   <div className="pd-rev-stars"><RatingStars value={r.rating} /></div>
                 </div>
                 <p className="pd-rev-comment">{r.comment}</p>
-                {r.created_at && <div className="pd-rev-date">{new Date(r.created_at).toLocaleDateString()}</div>}
+                {r.created_at && (
+                  <div className="pd-rev-date">
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

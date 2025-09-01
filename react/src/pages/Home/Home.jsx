@@ -1,11 +1,15 @@
+// src/pages/Home/Home.jsx
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import "./Home.css";
 import CategoryShowcase from "../../components/CategoryShowcase/CategoryShowcase";
 
-// ✅ import About and Contact
+// ✅ About and Contact
 import About from "../About/About";
 import Contact from "../Contact/Contact";
+
+// ✅ Prefetch first page of a category on hover/touch
+import { prefetchCategoryFirstPage } from "../../utils/prefetch";
 
 import slide1 from "../../assets/images/slide2.jpg"; // Bag
 import slide2 from "../../assets/images/slide1.jpeg"; // Perfume
@@ -34,6 +38,8 @@ export default function Home() {
                 key={cat.id}
                 to={`/category/${cat.id}`}
                 className="btn btn-outline-light bb-catpill bb-catlink"
+                onMouseEnter={() => prefetchCategoryFirstPage(cat.id)}
+                onTouchStart={() => prefetchCategoryFirstPage(cat.id)}
               >
                 {cat.name}
               </NavLink>
@@ -51,54 +57,104 @@ export default function Home() {
       >
         <div className="carousel-inner">
           <div className="carousel-item active">
-            <img src={slide1} alt="Handmade Bag" loading="lazy" className="d-block w-100 bb-hero" />
+            <img
+              src={slide1}
+              alt="Handmade Bag"
+              loading="lazy"
+              className="d-block w-100 bb-hero"
+            />
             <div className="carousel-caption bb-cap">
               <h2 className="fw-bold bb-cap-title">Fabiola Handmade Bag</h2>
               <p className="mb-2">Elegance for every day.</p>
-              <NavLink to="/shop/bags" className="bb-cap-btn">Shop Bags</NavLink>
+              <NavLink to="/shop/bags" className="bb-cap-btn">
+                Shop Bags
+              </NavLink>
             </div>
           </div>
 
           <div className="carousel-item">
-            <img src={slide2} alt="Signature Perfume" loading="lazy" className="d-block w-100 bb-hero" />
+            <img
+              src={slide2}
+              alt="Signature Perfume"
+              loading="lazy"
+              className="d-block w-100 bb-hero"
+            />
             <div className="carousel-caption bb-cap">
               <h2 className="fw-bold bb-cap-title">Signature Perfume</h2>
               <p className="mb-2">Long-lasting, alluring notes.</p>
-              <NavLink to="/shop/perfume" className="bb-cap-btn">Shop Perfume</NavLink>
+              <NavLink to="/shop/perfume" className="bb-cap-btn">
+                Shop Perfume
+              </NavLink>
             </div>
           </div>
 
           <div className="carousel-item">
-            <img src={slide3} alt="Burgundy Nail Polish" loading="lazy" className="d-block w-100 bb-hero" />
+            <img
+              src={slide3}
+              alt="Burgundy Nail Polish"
+              loading="lazy"
+              className="d-block w-100 bb-hero"
+            />
             <div className="carousel-caption bb-cap">
               <h2 className="fw-bold bb-cap-title">Burgundy Nail Polish</h2>
               <p className="mb-2">Rich color. Perfect finish.</p>
-              <NavLink to="/shop/nails" className="bb-cap-btn">Shop Nails</NavLink>
+              <NavLink to="/shop/nails" className="bb-cap-btn">
+                Shop Nails
+              </NavLink>
             </div>
           </div>
         </div>
 
         {/* Controls */}
-        <button className="carousel-control-prev" type="button" data-bs-target="#homeCarousel" data-bs-slide="prev" aria-label="Previous slide">
+        <button
+          className="carousel-control-prev"
+          type="button"
+          data-bs-target="#homeCarousel"
+          data-bs-slide="prev"
+          aria-label="Previous slide"
+        >
           <span className="carousel-control-prev-icon" aria-hidden="true" />
           <span className="visually-hidden">Previous</span>
         </button>
-        <button className="carousel-control-next" type="button" data-bs-target="#homeCarousel" data-bs-slide="next" aria-label="Next slide">
+        <button
+          className="carousel-control-next"
+          type="button"
+          data-bs-target="#homeCarousel"
+          data-bs-slide="next"
+          aria-label="Next slide"
+        >
           <span className="carousel-control-next-icon" aria-hidden="true" />
           <span className="visually-hidden">Next</span>
         </button>
 
         {/* Dots */}
         <div className="carousel-indicators bb-dots">
-          <button type="button" data-bs-target="#homeCarousel" data-bs-slide-to="0" className="active" aria-current="true" aria-label="Slide 1" />
-          <button type="button" data-bs-target="#homeCarousel" data-bs-slide-to="1" aria-label="Slide 2" />
-          <button type="button" data-bs-target="#homeCarousel" data-bs-slide-to="2" aria-label="Slide 3" />
+          <button
+            type="button"
+            data-bs-target="#homeCarousel"
+            data-bs-slide-to="0"
+            className="active"
+            aria-current="true"
+            aria-label="Slide 1"
+          />
+          <button
+            type="button"
+            data-bs-target="#homeCarousel"
+            data-bs-slide-to="1"
+            aria-label="Slide 2"
+          />
+          <button
+            type="button"
+            data-bs-target="#homeCarousel"
+            data-bs-slide-to="2"
+            aria-label="Slide 3"
+          />
         </div>
       </div>
 
+      {/* === Categories (right under carousel) === */}
+      <CategoryShowcase />
 
-+     {/* === Categories (right under carousel) === */}
-+     <CategoryShowcase />
       {/* === About Section === */}
       <About />
 
