@@ -16,6 +16,7 @@ import ProductDetails from "./pages/ProductDetails/ProductDetails";
 import BookExpert from "./pages/BookExpert/BookExpert";
 import Cart from "./pages/Cart/Cart";
 import Checkout from "./pages/Checkout/Checkout";
+import { installCategoryHoverPrefetch } from "./utils/prefetch";
 
 
 

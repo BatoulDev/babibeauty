@@ -125,3 +125,92 @@ export function readPrefetchedProductDetails(id) {
   }
   return null;
 }
+
+/* ---------------- Hover prefetch for /category/:id links ---------------- */
+
+function warmImages(urls = [], max = 6) {
+  try {
+    urls.slice(0, max).forEach((u) => {
+      if (!u) return;
+      const img = new Image();
+      img.decoding = "async";
+      img.loading = "eager";
+      img.src = u;
+    });
+  } catch {}
+}
+
+/**
+ * Install a delegated hover/focus/touch prefetch on any link that points to
+ * /category/:id. Also works if the element (or a parent) has data-cat-id.
+ * Call once at app startup.
+ */
+export function installCategoryHoverPrefetch({
+  selector = 'a[href^="/category/"], a[href*="/category/"]',
+  attr = "data-cat-id",
+  delayMs = 80,
+} = {}) {
+  if (typeof window === "undefined" || typeof document === "undefined") return () => {};
+
+  const seen = new Set(); // catIds we've already prefetched in this session
+
+  const schedule = (catId) => {
+    if (!Number.isFinite(catId) || seen.has(catId)) return;
+    seen.add(catId);
+
+    const runner = () =>
+      prefetchCategoryFirstPage(catId)
+        .then((res) => {
+          // warm a few images for ultra-fast first paint
+          const data = res?.data ?? res ?? [];
+          const arr = Array.isArray(data) ? data : [];
+          const urls = arr.map((p) => p.image_url).filter(Boolean);
+          warmImages(urls, 6);
+        })
+        .catch(() => {});
+
+    if ("requestIdleCallback" in window) {
+      requestIdleCallback(runner, { timeout: 300 });
+    } else {
+      setTimeout(runner, 0);
+    }
+  };
+
+  const getIdFrom = (el) => {
+    // prefer explicit data attribute on the element or its parents
+    let node = el;
+    for (let i = 0; i < 3 && node; i += 1, node = node.parentElement) {
+      const v = node?.getAttribute?.(attr);
+      if (v) return Number(v);
+    }
+    // parse href (/category/:id)
+    const href = el.getAttribute && el.getAttribute("href");
+    if (!href) return null;
+    const m = href.match(/\/category\/(\d+)(?:\D|$)/);
+    return m ? Number(m[1]) : null;
+  };
+
+  const handler = (e) => {
+    const a = e.target.closest?.(selector);
+    if (!a) return;
+
+    const id = getIdFrom(a);
+    if (!Number.isFinite(id)) return;
+
+    // tiny debounce so we don’t prefetch while the cursor is just passing over
+    clearTimeout(a.__pf_timer);
+    a.__pf_timer = setTimeout(() => schedule(id), delayMs);
+  };
+
+  document.addEventListener("mouseover", handler, { passive: true });
+  // focusin doesn't need passive; leave options empty for widest support
+  document.addEventListener("focusin", handler);
+  document.addEventListener("touchstart", handler, { passive: true });
+
+  // uninstaller
+  return () => {
+    document.removeEventListener("mouseover", handler);
+    document.removeEventListener("focusin", handler);
+    document.removeEventListener("touchstart", handler);
+  };
+}

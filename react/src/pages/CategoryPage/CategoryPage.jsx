@@ -21,7 +21,8 @@ function usePreloadImages(urls = [], count = 2) {
       if (!u) return null;
       if ([...head.querySelectorAll('link[rel="preload"][as="image"]')].some(
         (lnk) => lnk.getAttribute("href") === u
-      )) return null;
+      ))
+        return null;
       const l = document.createElement("link");
       l.rel = "preload";
       l.as = "image";
@@ -69,6 +70,9 @@ export default function CategoryPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  // avoid header flashes
+  const [firstFetchDone, setFirstFetchDone] = useState(false);
 
   const loadingRef = useRef(false);
   const sentinelRef = useRef(null);
@@ -120,6 +124,7 @@ export default function CategoryPage() {
         }
         setErr(e?.message || "Failed to fetch products.");
       } finally {
+        if (pageNum === 1) setFirstFetchDone(true);
         if (!silent) setLoading(false);
         loadingRef.current = false;
       }
@@ -129,8 +134,10 @@ export default function CategoryPage() {
 
   // Reset when category changes
   useEffect(() => {
-    // abort on category switch
     if (controllerRef.current) controllerRef.current.abort("category-changed");
+
+    setLoading(true);
+    setFirstFetchDone(false);
 
     setItems([]);
     setPage(1);
@@ -147,13 +154,13 @@ export default function CategoryPage() {
       const arr = Array.isArray(data) ? data : [];
       setItems(arr);
       setLoading(false);
-      // Revalidate in background (silent, and safe to be aborted)
+      setFirstFetchDone(true);
+      // Revalidate in background
       loadPage(1, { silent: true });
     } else {
       loadPage(1);
     }
 
-    // abort any in-flight request on unmount
     return () => {
       if (controllerRef.current) controllerRef.current.abort("unmount");
     };
@@ -191,29 +198,30 @@ export default function CategoryPage() {
     () => (items || []).slice(0, 4).map((p) => p.image_url).filter(Boolean),
     [items]
   );
-  usePreloadImages(firstUrls, 2);
+  usePreloadImages(firstUrls, 3);
 
+  // skeletons while loading
   const list =
     items.length === 0 && loading
       ? Array.from({ length: 8 }).map((_, i) => ({ skeleton: true, id: `skel-${i}` }))
       : items;
 
+  // header count label
+  const countLabel = !firstFetchDone
+    ? "…"
+    : `${items.length}${items.length > 0 && hasMore ? " +" : ""} items`;
+
   return (
     <div className="container bb-prod-wrap">
       <div className="bb-prod-head">
         <h1 className="bb-prod-title">Products</h1>
-        <span className="bb-prod-count">
-          {items.length} {hasMore ? "+" : ""} items
-        </span>
+        <span className="bb-prod-count">{countLabel}</span>
       </div>
 
       {/* Only show real errors (ignore aborts) */}
       {err && <div className="alert alert-danger">{err}</div>}
 
-      {/* Empty state */}
-      {!loading && !err && items.length === 0 && (
-        <div className="bb-empty">No products found in this category.</div>
-      )}
+      {/* 🔕 Removed the "No products found" message completely */}
 
       <div className="bb-prod-grid">
         {list.map((p, idx) => (
@@ -251,7 +259,7 @@ export default function CategoryPage() {
 
       <div ref={sentinelRef} style={{ height: 1 }} />
 
-      {!loading && hasMore && (
+      {!loading && hasMore && items.length > 0 && (
         <div className="bb-load-more">
           <button
             className="bb-btn"

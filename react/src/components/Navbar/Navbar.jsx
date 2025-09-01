@@ -11,7 +11,7 @@ export default function Navbar({ isAuthenticated }) {
       <div className="container-fluid px-3 px-lg-4">
         {/* Brand */}
         <Link to="/" className="navbar-brand d-flex align-items-center">
-          <img src={logo} alt="Babi Beauty" width="60" height="40" className="me-2" />
+          
           <span className="bb-wordmark">Babi Beauty</span>
         </Link>
 

@@ -1,5 +1,5 @@
 // src/pages/Home/Home.jsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import "./Home.css";
 import CategoryShowcase from "../../components/CategoryShowcase/CategoryShowcase";
@@ -8,7 +8,7 @@ import CategoryShowcase from "../../components/CategoryShowcase/CategoryShowcase
 import About from "../About/About";
 import Contact from "../Contact/Contact";
 
-// ✅ Prefetch first page of a category on hover/touch
+// ✅ Prefetch first page of a category on interaction
 import { prefetchCategoryFirstPage } from "../../utils/prefetch";
 
 import slide1 from "../../assets/images/slide2.jpg"; // Bag
@@ -27,6 +27,21 @@ export default function Home() {
     { id: 7, name: "Tools & Accessories" },
   ]);
 
+  // ⚡ Idle prewarm: quietly prefetch a few categories after page settles
+  useEffect(() => {
+    const ids = categories.slice(0, 3).map((c) => c.id);
+    const run = () => ids.forEach((id) => prefetchCategoryFirstPage(id));
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const handle = requestIdleCallback(run, { timeout: 600 });
+      return () => {
+        if (typeof cancelIdleCallback === "function") cancelIdleCallback(handle);
+      };
+    } else {
+      const t = setTimeout(run, 250);
+      return () => clearTimeout(t);
+    }
+  }, [categories]);
+
   return (
     <div className="container-fluid p-0">
       {/* === Category bar === */}
@@ -37,9 +52,12 @@ export default function Home() {
               <NavLink
                 key={cat.id}
                 to={`/category/${cat.id}`}
+                data-cat-id={cat.id}
                 className="btn btn-outline-light bb-catpill bb-catlink"
                 onMouseEnter={() => prefetchCategoryFirstPage(cat.id)}
                 onTouchStart={() => prefetchCategoryFirstPage(cat.id)}
+                onFocus={() => prefetchCategoryFirstPage(cat.id)}
+                onPointerDown={() => prefetchCategoryFirstPage(cat.id)}
               >
                 {cat.name}
               </NavLink>
@@ -49,61 +67,57 @@ export default function Home() {
       </nav>
 
       {/* === Carousel === */}
-      <div
-        id="homeCarousel"
-        className="carousel slide bb-carousel"
-        data-bs-ride="carousel"
-        data-bs-interval="5000"
-      >
-        <div className="carousel-inner">
-          <div className="carousel-item active">
-            <img
-              src={slide1}
-              alt="Handmade Bag"
-              loading="lazy"
-              className="d-block w-100 bb-hero"
-            />
-            <div className="carousel-caption bb-cap">
-              <h2 className="fw-bold bb-cap-title">Fabiola Handmade Bag</h2>
-              <p className="mb-2">Elegance for every day.</p>
-              <NavLink to="/shop/bags" className="bb-cap-btn">
-                Shop Bags
-              </NavLink>
-            </div>
-          </div>
+<div
+  id="homeCarousel"
+  className="carousel slide bb-carousel"
+  data-bs-ride="carousel"
+  data-bs-interval="5000"
+>
+  <div className="carousel-inner">
+    <div className="carousel-item active">
+      <img
+        src={slide1}
+        alt="Handmade Bag"
+        loading="lazy"
+        className="d-block w-100 bb-hero"
+      />
+      <div className="carousel-caption bb-cap">
+        <h2 className="fw-bold bb-cap-title">Fabiola Handmade Bag</h2>
+        <p className="mb-2">Elegance for every day.</p>
+       
+      </div>
+    </div>
 
-          <div className="carousel-item">
-            <img
-              src={slide2}
-              alt="Signature Perfume"
-              loading="lazy"
-              className="d-block w-100 bb-hero"
-            />
-            <div className="carousel-caption bb-cap">
-              <h2 className="fw-bold bb-cap-title">Signature Perfume</h2>
-              <p className="mb-2">Long-lasting, alluring notes.</p>
-              <NavLink to="/shop/perfume" className="bb-cap-btn">
-                Shop Perfume
-              </NavLink>
-            </div>
-          </div>
+    <div className="carousel-item">
+      <img
+        src={slide2}
+        alt="Signature Perfume"
+        loading="lazy"
+        className="d-block w-100 bb-hero"
+      />
+      <div className="carousel-caption bb-cap">
+        <h2 className="fw-bold bb-cap-title">Signature Perfume</h2>
+        <p className="mb-2">Long-lasting, alluring notes.</p>
+       
+      </div>
+    </div>
 
-          <div className="carousel-item">
-            <img
-              src={slide3}
-              alt="Burgundy Nail Polish"
-              loading="lazy"
-              className="d-block w-100 bb-hero"
-            />
-            <div className="carousel-caption bb-cap">
-              <h2 className="fw-bold bb-cap-title">Burgundy Nail Polish</h2>
-              <p className="mb-2">Rich color. Perfect finish.</p>
-              <NavLink to="/shop/nails" className="bb-cap-btn">
-                Shop Nails
-              </NavLink>
-            </div>
-          </div>
-        </div>
+    <div className="carousel-item">
+      <img
+        src={slide3}
+        alt="Burgundy Nail Polish"
+        loading="lazy"
+        className="d-block w-100 bb-hero"
+      />
+      <div className="carousel-caption bb-cap">
+        <h2 className="fw-bold bb-cap-title">Burgundy Nail Polish</h2>
+        <p className="mb-2">Rich color. Perfect finish.</p>
+       
+      </div>
+    </div>
+  </div>
+
+
 
         {/* Controls */}
         <button

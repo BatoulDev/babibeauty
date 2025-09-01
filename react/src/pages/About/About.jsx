@@ -107,7 +107,7 @@ export default function About() {
         <div className="container cta-wrap">
           <h3>Ready to glow?</h3>
           <p>Explore the collection and find your new everyday favorites.</p>
-          <a className="btn-primary" href="/shop">Visit shop</a>
+        
         </div>
       </section>
     </main>
