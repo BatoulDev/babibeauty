@@ -1,0 +1,85 @@
+/* =========================================================
+   THEME / GLOBAL
+   ========================================================= */
+:root { --bb-accent:#561C24; }
+
+/* kill default body margin + match site bg so no dark frame appears */
+html, body { margin:0; }
+body { background: linear-gradient(180deg, #561C24 0%, #6f2b32 100%); }
+
+/* =========================================================
+   HOME – CATEGORY BAR
+   ========================================================= */
+.bb-catbar{
+  position: sticky; top:0; z-index:1030;
+  background:#561C24; border-bottom:1px solid rgba(255,255,255,.15);
+}
+.bb-scroll{ display:flex; gap:.5rem; padding:.6rem 0 .8rem; overflow-x:auto; justify-content:center; }
+.bb-scroll::-webkit-scrollbar{ display:none; }
+.bb-catpill{
+  scroll-snap-align:start; white-space:nowrap;
+  border-radius:999px; border-color:rgba(255,255,255,.55)!important;
+  color:#fff!important; font-size:.875rem; padding:.45rem .9rem;
+}
+.bb-catpill:hover{ background:rgba(255,255,255,.1); }
+
+/* =========================================================
+   HOME – CAROUSEL / HERO (smaller + no black borders)
+   ========================================================= */
+.bb-carousel{
+  position:relative;
+  margin-bottom:0!important;
+  background: transparent;            /* <- remove black box */
+}
+.bb-carousel .carousel-inner{ overflow:hidden; }
+.bb-carousel .carousel-item{ transition: transform .6s ease-in-out; background:transparent; }
+.bb-carousel img{ display:block; border:0; outline:0; }
+
+/* Consistent, smaller hero size */
+.bb-hero{
+  width:100%;
+  aspect-ratio: 21 / 9;               /* classic wide hero */
+  height:auto;                        /* keep aspect ratio */
+  max-height:520px;                   /* cap on large screens */
+  min-height:260px;                   /* not too tiny */
+  object-fit:cover;
+  object-position:center;
+  border:0;
+}
+
+/* Caption button */
+.bb-cap-btn{
+  display:inline-block; background-color:var(--bb-accent);
+  color:#fff!important; text-decoration:none; font-weight:600; font-size:.95rem;
+  padding:.45rem 1rem; border-radius:.5rem; border:1px solid var(--bb-accent);
+  transition:background-color .25s, transform .2s;
+}
+.bb-cap-btn:hover, .bb-cap-btn:focus{ background-color:#6a202a; color:#fff!important; transform:translateY(-2px); }
+
+/* Controls readable on light/dark photos */
+.carousel-control-prev-icon, .carousel-control-next-icon{
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)) invert(1);
+}
+
+/* Dots */
+.bb-dots{ margin-bottom:.5rem; }
+.bb-dots>button{ width:.5rem; height:.5rem; border-radius:50%; }
+
+/* Remove any extra white gap under carousel */
+.carousel{ margin-bottom:0!important; padding-bottom:0!important; }
+
+/* =========================================================
+   SMALL PHONES
+   ========================================================= */
+@media (max-width:576px){
+  .bb-catpill{ font-size:.82rem; padding:.4rem .8rem; }
+  .bb-hero{ aspect-ratio: 4 / 3; max-height:360px; }  /* a bit taller on phones */
+  .carousel-control-prev, .carousel-control-next{ width:18%; }
+}
+
+/* =========================================================
+   Footer theme (unchanged)
+   ========================================================= */
+.bb-footer{ background:#561C24; color:#fff; }
+.bb-footer a{ color:#eee8dc; text-decoration:none; }
+.bb-footer a:hover{ color:#fff; }

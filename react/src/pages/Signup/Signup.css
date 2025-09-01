@@ -1,0 +1,14 @@
+.card-soft {
+  border: 0;
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+  overflow: hidden;
+  background: #fff;
+  max-width: 680px !important;   /* 👈 force override */
+  width: 100%;
+}
+
+/* in your Signup.css or a global stylesheet */
+.bb-catbar { background: #561C24; position: sticky; top: 56px; z-index: 1010; }
+.bb-catpill { border-color: rgba(255,255,255,.5); color: #fff; }
+.bb-catpill:hover { background: rgba(255,255,255,.15); color: #fff; }

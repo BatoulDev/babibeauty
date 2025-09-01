@@ -1,0 +1,89 @@
+:root{
+  --bb-burgundy:#561C24;
+  --bb-burgundy-2:#6D2932;
+  --bb-wheat:#EEE4D1;
+  --bb-wheat-2:#f6efe2;
+
+  /* desktop circle size */
+  --oval-size: clamp(88px, 11vw, 140px);
+  --gap: clamp(10px, 2.2vw, 22px);
+}
+
+/* --- Section header (unchanged) --- */
+.bb-cats{ padding: clamp(24px,4vw,48px) 0; background:#fff; }
+.bb-cats-eyebrow{ color:var(--bb-burgundy-2); font-weight:600; letter-spacing:.04em;
+  margin:0 0 .25rem; text-transform:uppercase; font-size:.9rem; text-align:center; }
+.bb-cats-title{ text-align:center; margin:0 0 1.25rem; font-weight:800; color:var(--bb-burgundy); }
+.bb-cats-title span{ color:var(--bb-burgundy-2); }
+
+/* --- Desktop / large: single line --- */
+.bb-cats-row{
+  display:flex;
+  flex-wrap:nowrap;                 /* one row on large screens */
+  gap: var(--gap);
+  overflow-x:hidden;                /* no scroll bar on desktop */
+  justify-content:center;
+}
+
+/* --- Cards --- */
+.bb-cat-card{
+  flex: 0 0 auto;
+  width: calc(var(--oval-size) + 4px);
+  text-decoration:none;
+  display:flex; flex-direction:column; align-items:center;
+  transition: transform .18s ease;
+}
+.bb-cat-card:hover{ transform: translateY(-2px); }
+
+/* --- Circle --- */
+.bb-cat-oval{
+  width: var(--oval-size);
+  height: var(--oval-size);
+  border-radius:50%;
+  background: var(--bb-wheat);
+  box-shadow: 0 6px 18px rgba(0,0,0,.10);
+  display:grid; place-items:center;
+  overflow:hidden;
+}
+.bb-cat-oval img{ width:100%; height:100%; object-fit:cover; }
+.bb-cat-oval-fallback{ width:70%; height:70%; border-radius:50%;
+  background: linear-gradient(180deg,var(--bb-wheat-2),var(--bb-wheat));
+}
+
+/* --- Label --- */
+.bb-cat-name{
+  margin-top:.55rem;
+  font-weight:700;
+  color: var(--bb-burgundy);
+  font-size: clamp(.9rem, 1.1vw, 1rem);
+  text-align:center;
+  max-width: var(--oval-size);
+}
+.bb-cat-card:hover .bb-cat-name{ color: var(--bb-burgundy-2); }
+
+/* ===== Mobile / tablet: wrap so ALL categories are visible ===== */
+@media (max-width: 992px){
+  .bb-cats-row{
+    flex-wrap:wrap;                 /* allow multiple rows */
+    overflow-x:visible;
+    row-gap: var(--gap);
+  }
+  .bb-cat-card{
+    flex: 0 1 calc(25% - var(--gap));   /* 4 per row on tablets */
+  }
+  .bb-cat-name{ font-size: .95rem; }
+}
+
+@media (max-width: 640px){
+  :root{ --oval-size: clamp(84px, 28vw, 120px); }
+  .bb-cat-card{
+    flex: 0 1 calc(33.333% - var(--gap)); /* 3 per row on small phones */
+  }
+}
+
+@media (max-width: 420px){
+  :root{ --oval-size: clamp(76px, 32vw, 110px); }
+  .bb-cat-card{
+    flex: 0 1 calc(50% - var(--gap));     /* 2 per row on very small phones */
+  }
+}

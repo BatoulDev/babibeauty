@@ -1,0 +1,10 @@
+/* src/components/RatingStars.css */
+.bb-stars{ display:flex; align-items:center; gap:4px; }
+.star{ font-size:14px; line-height:1; }
+.star.full{ color:#FFD54D; }
+.star.empty{ color:#D7D7D7; }
+.star.half{
+  background: linear-gradient(90deg, #FFD54D 50%, #D7D7D7 50%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.bb-stars-count{ margin-left:4px; color:#6D2932; font-size:.85rem; }

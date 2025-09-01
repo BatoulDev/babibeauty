@@ -1,0 +1,94 @@
+/* src/pages/CategoryPage/CategoryPage.css */
+:root{
+  --bb-burgundy:#561C24;
+  --bb-burgundy-2:#6D2932;
+  --bb-wheat:#EEE4D1;
+  --bb-wheat-2:#f6efe2;
+  --bb-card-shadow:0 8px 24px rgba(0,0,0,.08);
+}
+
+/* header */
+.bb-prod-wrap{ padding: clamp(18px, 3vw, 28px) 0 42px; }
+.bb-prod-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+.bb-prod-title{ margin:0; font-weight:800; color:var(--bb-burgundy); }
+.bb-prod-count{ color:#7a6d6d; }
+
+/* grid */
+.bb-prod-grid{
+  display:grid;
+  gap: clamp(14px, 2.2vw, 22px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1200px){ .bb-prod-grid{ grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 768px){ .bb-prod-grid{ grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px){ .bb-prod-grid{ grid-template-columns: 1fr; } }
+
+/* card */
+.bb-card{
+  background:#fff;
+  border-radius:16px;
+  box-shadow: var(--bb-card-shadow);
+  overflow:hidden;
+  border:1px solid #eee8dc;       /* wheat border */
+  display:flex; flex-direction:column;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.bb-card:hover{ transform: translateY(-3px); box-shadow:0 10px 28px rgba(0,0,0,.12); }
+
+/* image box keeps aspect */
+.bb-imgbox{
+  aspect-ratio: 4 / 5;
+  background: var(--bb-wheat-2);
+  display:grid; place-items:center;
+}
+.bb-imgbox img{ width:100%; height:100%; object-fit:cover; }
+
+/* body */
+.bb-card-body{ padding:14px; }
+.bb-name{
+  font-size: .98rem;
+  font-weight:700;
+  color: var(--bb-burgundy-2);
+  margin: 0 0 4px;
+}
+.bb-price{
+  color: var(--bb-burgundy);
+  font-weight:800;
+  margin: 6px 0 10px;
+}
+.bb-btn{
+  width:100%;
+  background: var(--bb-burgundy);
+  color:#fff;
+  border:none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.bb-btn:hover{ background:#4b1720; }
+
+/* skeleton state */
+.bb-card.skeleton .bb-img-skel{
+  width:100%; height:100%;
+  background: linear-gradient(90deg,#f2eee6,#e8e1d5,#f2eee6);
+  animation: bb-shimmer 1.1s linear infinite;
+}
+.bb-card.skeleton .bb-name,
+.bb-card.skeleton .bb-price{ background:#eee; color:transparent; border-radius:6px; height: 16px; }
+@keyframes bb-shimmer{
+  0%{ background-position: -200px 0; }
+  100%{ background-position: 200px 0; }
+}
+
+
+.bb-img.is-blur {
+  filter: blur(12px);
+  transform: scale(1.02);
+  background: #f7f3ed;
+}
+.bb-img.is-loaded {
+  filter: none;
+  transform: none;
+  transition: filter .25s ease, transform .25s ease;
+}
