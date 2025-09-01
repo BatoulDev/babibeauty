@@ -11,16 +11,29 @@ export default function Cart() {
   const [err, setErr] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
 
-  // Voucher: input vs applied code
+  // Voucher
   const [voucherInput, setVoucherInput] = useState("");
   const [appliedCode, setAppliedCode] = useState(null);
+
+  // ✅ Selection (used for totals)
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const toggleOne = (id, checked) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   async function load() {
     setLoading(true);
     setErr("");
     try {
       const res = await get("/cart"); // { items, subtotal, count }
-      setItems(res.items || []);
+      const arr = res.items || [];
+      setItems(arr);
+      // Select all by default so totals show immediately
+      setSelectedIds(new Set(arr.map((i) => i.id)));
     } catch (e) {
       if (e.status === 401) {
         navigate("/login", { state: { redirectTo: "/cart" } });
@@ -31,38 +44,38 @@ export default function Cart() {
       setLoading(false);
     }
   }
-
   useEffect(() => { load(); }, []);
 
-  // If user clears the input, remove any applied discount
+  // If user clears voucher input, remove discount
   useEffect(() => {
-    if (voucherInput.trim() === "") {
-      setAppliedCode(null);
-    }
+    if (voucherInput.trim() === "") setAppliedCode(null);
   }, [voucherInput]);
 
-  const subtotal = useMemo(() => {
-    return items.reduce((acc, it) => acc + Number(it.price) * Number(it.quantity), 0);
-  }, [items]);
+  // ---- Totals depend on selection ----
+  const selectedItems = useMemo(
+    () => items.filter((it) => selectedIds.has(it.id)),
+    [items, selectedIds]
+  );
 
-  // ✨ tiny demo: flat shipping on small orders, 0 if big
+  const subtotal = useMemo(
+    () => selectedItems.reduce((acc, it) => acc + Number(it.price) * Number(it.quantity), 0),
+    [selectedItems]
+  );
+
+  // Flat shipping on small orders (only if something is selected)
   const shipping = subtotal > 0 && subtotal < 100 ? 5 : 0;
 
-  // ✨ discount applies ONLY when a valid code is applied (on click)
   const discountRate = appliedCode === "WHEAT10" ? 0.10 : 0;
   const discount = subtotal * discountRate;
   const total = Math.max(0, subtotal + shipping - discount);
 
-  function fmt(v) {
-    return `$${Number(v || 0).toFixed(2)}`;
-  }
+  const fmt = (v) => `$${Number(v || 0).toFixed(2)}`;
 
   async function updateQty(cartId, nextQty) {
     if (nextQty < 1) return;
     const idx = items.findIndex((i) => i.id === cartId);
     if (idx === -1) return;
 
-    // optimistic
     const prev = items[idx];
     const snapshot = [...items];
     const updated = { ...prev, quantity: nextQty };
@@ -74,7 +87,6 @@ export default function Cart() {
     try {
       await patch(`/cart/${cartId}`, { quantity: nextQty });
     } catch (e) {
-      // revert
       setItems(snapshot);
       if (e.status === 401) {
         navigate("/login", { state: { redirectTo: "/cart" } });
@@ -95,6 +107,12 @@ export default function Cart() {
       setItems(snapshot);
       alert(e?.message || "Failed to remove item.");
     }
+    // also drop from selection
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(cartId);
+      return next;
+    });
   }
 
   async function clearCart() {
@@ -106,18 +124,14 @@ export default function Cart() {
       setItems(snapshot);
       alert(e?.message || "Failed to clear cart.");
     }
+    setSelectedIds(new Set());
   }
 
-  // --- Voucher handlers ---
   function applyVoucher() {
     const code = voucherInput.trim().toUpperCase();
-    if (!code) return;              // do nothing if empty
-    if (code === "WHEAT10") {
-      setAppliedCode(code);         // ✅ Apply discount
-    } else {
-      // keep current applied code until user clears input
-      alert("Invalid code");
-    }
+    if (!code) return;
+    if (code === "WHEAT10") setAppliedCode(code);
+    else alert("Invalid code");
   }
 
   if (loading) {
@@ -178,11 +192,22 @@ export default function Cart() {
         {/* Left: items */}
         <div className="cart-left">
           {items.map((it) => {
-            const src =
-              it?.product?.image_path ? media(it.product.image_path) : "/placeholder.png";
+            const src = it?.product?.image_path ? media(it.product.image_path) : "/placeholder.png";
             const line = Number(it.price) * Number(it.quantity);
+            const checked = selectedIds.has(it.id);
+
             return (
-              <div key={it.id} className="cart-row">
+              <div key={it.id} className="cart-row" data-checked={checked ? "1" : "0"}>
+                {/* Top-right checkbox (doesn't change design) */}
+                <label className="row-check" title="Select item">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => toggleOne(it.id, e.target.checked)}
+                    aria-label={`Select ${it?.product?.name || "item"}`}
+                  />
+                </label>
+
                 <img className="thumb" src={src} alt={it?.product?.name || "Product"} />
                 <div className="info">
                   <div className="name">{it?.product?.name || "Product"}</div>
@@ -237,7 +262,7 @@ export default function Cart() {
                 type="text"
                 placeholder="Discount code (try WHEAT10)"
                 value={voucherInput}
-                onChange={(e) => setVoucherInput(e.target.value)}  // typing does NOT apply
+                onChange={(e) => setVoucherInput(e.target.value)}
               />
               <button className="btn mini" onClick={applyVoucher}>Apply</button>
             </div>
@@ -248,37 +273,35 @@ export default function Cart() {
               </div>
             )}
 
-            <div className="sum-row">
-              <span>Sub Total</span>
-              <span>{fmt(subtotal)}</span>
-            </div>
+            <div className="sum-row"><span>Sub Total</span><span>{fmt(subtotal)}</span></div>
             <div className="sum-row">
               <span>Discount</span>
               <span className={discount ? "good" : ""}>
                 {discount ? `- ${fmt(discount)}` : fmt(0)}
               </span>
             </div>
-            <div className="sum-row">
-              <span>Delivery fee</span>
-              <span>{fmt(shipping)}</span>
-            </div>
+            <div className="sum-row"><span>Delivery fee</span><span>{fmt(shipping)}</span></div>
 
             <div className="sum-divider" />
-
-            <div className="sum-row total">
-              <span>Total</span>
-              <span>{fmt(total)}</span>
-            </div>
+            <div className="sum-row total"><span>Total</span><span>{fmt(total)}</span></div>
 
             <div className="sum-note">
               <i className="bi bi-shield-check"></i>
               <span>30-day warranty against manufacturing defects.</span>
             </div>
 
-            <button className="btn primary xl" onClick={() => navigate("/checkout")}>
-  Checkout Now
-</button>
-
+            <button
+              className="btn primary xl"
+              disabled={selectedIds.size === 0}
+              onClick={() =>
+                navigate("/checkout", {
+                  state: { selectedItemIds: Array.from(selectedIds) },
+                })
+              }
+              title={selectedIds.size === 0 ? "Select at least one item" : "Checkout"}
+            >
+              Checkout Now
+            </button>
           </div>
         </aside>
       </div>

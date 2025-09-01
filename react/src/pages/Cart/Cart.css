@@ -124,3 +124,19 @@
   .cart-shell{ grid-template-columns: 1fr; }
   .cart-right{ position:static; }
 }
+/* place the checkbox at the top-right of each card */
+.cart-row { position: relative; } /* preserves your current layout */
+.row-check {
+  position: absolute;
+  top: 10px;          /* adjust 10–14px if you want it higher/lower */
+  right: 18px;        /* nudge to align with your right padding */
+  z-index: 2;
+}
+.row-check input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--burgundy); /* native checkbox color to match brand */
+  /* a tiny lift for visibility on light gradient */
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.12));
+}
