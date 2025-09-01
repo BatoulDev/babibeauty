@@ -10,53 +10,105 @@ use Illuminate\Support\Facades\Cache;
 
 class ProductController extends Controller
 {
-    public function index(Request $request)
-    {
-        $products = Product::query()
-            ->select('id','name','price','image_path','category_id','brand_id','stock','is_active')
-            ->when($request->filled('category_id'),
-                fn ($qq) => $qq->where('category_id', (int) $request->category_id))
-            ->where('is_active', 1)
-            ->orderBy('name')
-            ->withAvg('reviews', 'rating')      // ->reviews_avg_rating
-            ->withCount('reviews')              // ->reviews_count
-            ->get();
+  public function index(Request $request)
+{
+    $q = Product::query()
+        ->select('id','name','price','image_path','category_id','brand_id','stock','is_active')
+        ->where('is_active', 1)
+        ->when($request->filled('category_id'),
+            fn ($qq) => $qq->where('category_id', (int) $request->category_id))
+        ->when($request->filled('brand_id'),
+            fn ($qq) => $qq->where('brand_id', (int) $request->brand_id))
+        ->orderBy('name')
+        ->withAvg('reviews', 'rating')
+        ->withCount('reviews');
 
-        $payload = $products->map(function ($p) {
+    // ✅ paginate instead of get()
+    $perPage = (int) $request->input('per_page', 24);
+    $products = $q->paginate($perPage);
+
+    // ✅ transform each item
+    $mapped = $products->getCollection()->map(function ($p) {
+        return [
+            'id'            => $p->id,
+            'name'          => $p->name,
+            'price'         => (float) $p->price,
+            'image_url'     => $this->publicImageUrl($p->image_path),
+            'rating'        => is_numeric($p->reviews_avg_rating ?? null)
+                                ? round($p->reviews_avg_rating, 1) : null,
+            'reviews_count' => (int) ($p->reviews_count ?? 0),
+        ];
+    });
+
+    // ✅ replace the paginator's collection with transformed items
+    $products->setCollection($mapped);
+
+    return response()->json($products);
+}
+
+
+    /**
+     * FAST, cacheable details endpoint (small payload for first paint).
+     * GET /api/products/{id}
+     */
+    public function showFast(Request $req, int $id)
+    {
+        // Cache the serialized product view for 10 minutes
+        $cacheKey = "product:fast:$id:v1";
+        $payload = Cache::remember($cacheKey, 600, function() use ($id) {
+            $p = Product::with(['brand:id,name', 'category:id,name'])
+                ->withAvg('reviews', 'rating')
+                ->withCount('reviews')
+                ->select(['id','name','price','image_path','brand_id','category_id','updated_at'])
+                ->findOrFail($id);
+
+            $imageUrl = $this->publicImageUrl($p->image_path);
+            $srcset   = $imageUrl ? ($imageUrl . ' 800w') : null;
+
             return [
                 'id'            => $p->id,
                 'name'          => $p->name,
                 'price'         => (float) $p->price,
-                // always build a safe public URL (or placeholder)
-                'image_url' => $this->publicImageUrl($p->image_path),
-
+                'image_url'     => $imageUrl,
+                'image_srcset'  => $srcset,
+                'brand'         => optional($p->brand)->name,
+                'category'      => optional($p->category)->name,
                 'rating'        => is_numeric($p->reviews_avg_rating ?? null)
-                                    ? round($p->reviews_avg_rating, 1)
-                                    : null,
+                                    ? round((float)$p->reviews_avg_rating, 1) : 0.0,
                 'reviews_count' => (int) ($p->reviews_count ?? 0),
+                'description'   => $p->short_description ?? null, // keep light if present
+                'updated_at'    => $p->updated_at?->toRfc7231String(),
             ];
-        })->values();
+        });
 
-        return response()->json($payload);
+        // Strong ETag based on payload hash
+        $etag = '"' . sha1(json_encode($payload)) . '"';
+        if (trim((string)$req->header('If-None-Match')) === $etag) {
+            return response('', 304)
+                ->header('ETag', $etag)
+                ->header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+        }
+
+        return response()->json($payload)
+            ->header('ETag', $etag)
+            ->header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
     }
 
-   public function show(Product $product)
+    /**
+     * FULL details (legacy/show) – keep for admin/internal or if you still need it.
+     * Consider pointing your frontend to showFast + lazy /reviews for best speed.
+     */
+    public function show(Product $product)
     {
         $product->loadMissing([
             'brand:id,name',
             'category:id,name',
-            // newest first; include reviewer name if you have users table
             'reviews' => fn ($q) => $q->latest()->with('user:id,name'),
         ])->loadAvg('reviews', 'rating')
           ->loadCount('reviews');
 
-        // Build full image URL (works with `php artisan storage:link`)
         $imageUrl = $product->image_path ? url(Storage::url($product->image_path)) : null;
-
-        // Optional simple srcset thumbs (adjust to your thumb route if you have one)
-        $srcset = $imageUrl
-            ? $imageUrl.' 800w'
-            : null;
+        $srcset   = $imageUrl ? ($imageUrl.' 800w') : null;
 
         return response()->json([
             'id'             => $product->id,
@@ -70,8 +122,6 @@ class ProductController extends Controller
             'category'       => $product->category?->name,
             'rating'         => round((float) ($product->reviews_avg_rating ?? 0), 1),
             'reviews_count'  => (int) ($product->reviews_count ?? 0),
-
-            // map reviews
             'reviews'        => $product->reviews->map(fn ($r) => [
                 'id'         => $r->id,
                 'user'       => $r->user->name ?? 'Guest',
@@ -80,6 +130,33 @@ class ProductController extends Controller
                 'created_at' => $r->created_at?->toDateTimeString(),
             ]),
         ]);
+    }
+
+    /**
+     * Lightweight reviews endpoint to lazy-load on the client.
+     * GET /api/products/{id}/reviews
+     */
+    public function reviewsFast(int $id)
+    {
+        $cacheKey = "product:reviews:$id:v1";
+        $reviews = Cache::remember($cacheKey, 600, function() use ($id) {
+            return \App\Models\Review::where('reviewable_type', Product::class)
+                ->where('reviewable_id', $id)
+                ->latest('id')
+                ->limit(50)
+                ->with('user:id,name')
+                ->get(['id','user_id','rating','comment','created_at'])
+                ->map(fn($r) => [
+                    'id'         => $r->id,
+                    'user'       => optional($r->user)->name ?? 'User',
+                    'rating'     => (int)$r->rating,
+                    'comment'    => $r->comment,
+                    'created_at' => $r->created_at?->toDateTimeString(),
+                ]);
+        });
+
+        return response()->json($reviews)
+            ->header('Cache-Control', 'public, max-age=120, stale-while-revalidate=60');
     }
 
     /** POST /products */
@@ -93,7 +170,6 @@ class ProductController extends Controller
             'price'       => ['required','numeric','min:0'],
             'stock'       => ['nullable','integer','min:0'],
             'is_active'   => ['nullable','boolean'],
-            // 'image_path' => ['sometimes','string'],
         ]);
 
         $product = Product::create($data)->load(['brand:id,name','category:id,name']);
@@ -113,7 +189,6 @@ class ProductController extends Controller
             'price'       => ['sometimes','numeric','min:0'],
             'stock'       => ['sometimes','integer','min:0'],
             'is_active'   => ['sometimes','boolean'],
-            // 'image_path' => ['sometimes','string'],
         ]);
 
         $product->update($data);
@@ -127,7 +202,6 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         $product->delete();
-        // 204 must not include a body — return an empty response
         return response()->noContent();
     }
 
@@ -135,26 +209,22 @@ class ProductController extends Controller
     /* helpers                                                            */
     /* ------------------------------------------------------------------ */
 
-    /**
-     * Build a usable public URL from image_path, or return a burgundy placeholder.
-     */
-  protected function publicImageUrl(?string $path): string
-{
-    if (!$path || trim($path) === '') return $this->placeholderDataUri();
-    if (preg_match('#^https?://#i', $path)) return $path;
+    protected function publicImageUrl(?string $path): string
+    {
+        if (!$path || trim($path) === '') return $this->placeholderDataUri();
+        if (preg_match('#^https?://#i', $path)) return $path;
 
-    $p = ltrim(str_replace('\\','/',$path), '/');
-    foreach (['storage/app/public/','app/public/','public/','storage/'] as $prefix) {
-        if (stripos($p, $prefix) === 0) { $p = substr($p, strlen($prefix)); break; }
+        $p = ltrim(str_replace('\\','/',$path), '/');
+        foreach (['storage/app/public/','app/public/','public/','storage/'] as $prefix) {
+            if (stripos($p, $prefix) === 0) { $p = substr($p, strlen($prefix)); break; }
+        }
+        $segments = array_map(fn($seg) =>
+            preg_match('/%[0-9A-Fa-f]{2}/', $seg) ? $seg : rawurlencode($seg),
+            array_filter(explode('/', $p), fn($s) => $s !== '')
+        );
+        $base = rtrim(config('app.url') ?: url('/'), '/');
+        return $base . '/storage/' . implode('/', $segments);
     }
-    $segments = array_map(fn($seg) =>
-        preg_match('/%[0-9A-Fa-f]{2}/', $seg) ? $seg : rawurlencode($seg),
-        array_filter(explode('/', $p), fn($s) => $s !== '')
-    );
-    $base = rtrim(config('app.url') ?: url('/'), '/'); // ex: http://127.0.0.1:8000
-    return $base . '/storage/' . implode('/', $segments);
-}
-
 
     protected function placeholderDataUri(): string
     {

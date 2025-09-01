@@ -1,9 +1,9 @@
+// src/pages/CategoryPage/CategoryPage.jsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, NavLink } from "react-router-dom";
 import { fetchJson } from "../../utils/api";
 import RatingStars from "../../components/RatingStars/RatingStars";
 import "./CategoryPage.css";
-import { NavLink } from "react-router-dom";
 
 /* ---------------- helpers ---------------- */
 
@@ -29,8 +29,7 @@ function usePreloadImages(urls = [], count = 2) {
 
 function SpeedyImage({ src, srcSet, sizes, alt, index }) {
   const [loaded, setLoaded] = useState(false);
-  const eager = index < 4; // first row eager
-
+  const eager = index < 4;
   return (
     <img
       className={loaded ? "bb-img is-loaded" : "bb-img"}
@@ -56,7 +55,8 @@ function SpeedyImage({ src, srcSet, sizes, alt, index }) {
 /* ---------------- page ---------------- */
 
 export default function CategoryPage() {
-  const { id } = useParams();
+  const { id } = useParams();                 // /category/:id
+  const catId = Number(id) || "";             // normalize (avoid "undefined")
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -67,36 +67,51 @@ export default function CategoryPage() {
   const sentinelRef = useRef(null);
 
   const loadPage = useCallback(async (pageNum) => {
-    if (loadingRef.current) return;
+    if (loadingRef.current || !catId) return;
     loadingRef.current = true;
     setLoading(true);
     try {
-      const res = await fetchJson("/api/products", {
-        params: { category_id: id, page: pageNum, per_page: 24 },
-      });
-      const data = res?.data ?? res?.items ?? res;
+      // 🔑 Build query string explicitly (don’t rely on fetchJson params)
+      const qs = new URLSearchParams({
+        category_id: String(catId),
+        page: String(pageNum),
+        per_page: "24",
+      }).toString();
+
+      const res = await fetchJson(`/api/products?${qs}`);
+
+      // Support both paginated and raw arrays
+      const data = res?.data ?? res?.items ?? res ?? [];
       const arr = Array.isArray(data) ? data : [];
+
       setItems((prev) => (pageNum === 1 ? arr : prev.concat(arr)));
-      // Laravel paginator presence check
-      const lastPage = res?.last_page ?? res?.meta?.last_page ?? pageNum;
-      setHasMore(pageNum < lastPage);
+
+      // Determine pagination
+      const lastPage =
+        res?.last_page ??
+        res?.meta?.last_page ??
+        (res?.links ? (res?.links?.next ? pageNum + 1 : pageNum) : pageNum);
+
+      setHasMore(pageNum < Number(lastPage));
     } catch (e) {
       setErr(e?.message || "Failed to fetch");
     } finally {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [id]);
+  }, [catId]);
 
-  // initial + category change
+  // Reset when category changes
   useEffect(() => {
     setItems([]);
     setPage(1);
     setHasMore(true);
+    setErr("");
+    window.scrollTo({ top: 0, behavior: "instant" });
     loadPage(1);
-  }, [id, loadPage]);
+  }, [catId, loadPage]);
 
-  // sentinel observer for infinite scroll
+  // Infinite scroll sentinel
   useEffect(() => {
     if (!hasMore) return;
     const el = sentinelRef.current;
@@ -108,22 +123,22 @@ export default function CategoryPage() {
         setPage(next);
         loadPage(next);
       }
-    }, { rootMargin: "800px 0px" }); // start early
+    }, { rootMargin: "800px 0px" });
     io.observe(el);
     return () => io.disconnect();
   }, [hasMore, page, loadPage]);
 
-  // Preload the very first few images for instant first paint
+  // Preload first few images
   const firstUrls = useMemo(
     () => (items || []).slice(0, 4).map((p) => p.image_url).filter(Boolean),
     [items]
   );
   usePreloadImages(firstUrls, 2);
 
-  // skeletons while *first* page is loading
-  const list = items.length === 0 && loading
-    ? Array.from({ length: 8 }).map((_, i) => ({ skeleton: true, id: `skel-${i}` }))
-    : items;
+  const list =
+    items.length === 0 && loading
+      ? Array.from({ length: 8 }).map((_, i) => ({ skeleton: true, id: `skel-${i}` }))
+      : items;
 
   return (
     <div className="container bb-prod-wrap">
@@ -158,21 +173,26 @@ export default function CategoryPage() {
               <div className="bb-price">
                 {p.skeleton ? "\u00A0" : `$${Number(p.price ?? 0).toFixed(2)}`}
               </div>
-             <button className="bb-btn" disabled={p.skeleton}>
-  <NavLink to={`/product/${p.id}`} className="bb-btn-link">See Details</NavLink>
-</button>
+              <button className="bb-btn" disabled={p.skeleton}>
+                <NavLink to={`/product/${p.id}`} className="bb-btn-link">See Details</NavLink>
+              </button>
             </div>
           </article>
         ))}
       </div>
 
-      {/* Infinite scroll sentinel */}
       <div ref={sentinelRef} style={{ height: 1 }} />
 
-      {/* Fallback manual load (visible if still hasMore and not loading) */}
       {!loading && hasMore && (
         <div className="bb-load-more">
-          <button className="bb-btn" onClick={() => { const n = page + 1; setPage(n); loadPage(n); }}>
+          <button
+            className="bb-btn"
+            onClick={() => {
+              const n = page + 1;
+              setPage(n);
+              loadPage(n);
+            }}
+          >
             Load more
           </button>
         </div>
