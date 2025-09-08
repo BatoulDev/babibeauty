@@ -9,7 +9,8 @@ import About from "../About/About";
 import Contact from "../Contact/Contact";
 
 // ✅ Prefetch first page of a category on interaction
-import { prefetchCategoryFirstPage } from "../../utils/prefetch";
+import { prefetchCategoryFirstPage, prefetchImages } from "../../utils/prefetch";
+
 
 import slide1 from "../../assets/images/slide2.jpg"; // Bag
 import slide2 from "../../assets/images/slide1.jpeg"; // Perfume
@@ -30,7 +31,18 @@ export default function Home() {
   // ⚡ Idle prewarm: quietly prefetch a few categories after page settles
   useEffect(() => {
     const ids = categories.slice(0, 3).map((c) => c.id);
-    const run = () => ids.forEach((id) => prefetchCategoryFirstPage(id));
+
+    const run = async () => {
+      for (const id of ids) {
+        const res = await prefetchCategoryFirstPage(id);
+        // prefetch images for this category
+        const data = res?.data ?? res ?? [];
+        if (Array.isArray(data)) {
+          prefetchImages(data);
+        }
+      }
+    };
+
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
       const handle = requestIdleCallback(run, { timeout: 600 });
       return () => {
@@ -67,57 +79,52 @@ export default function Home() {
       </nav>
 
       {/* === Carousel === */}
-<div
-  id="homeCarousel"
-  className="carousel slide bb-carousel"
-  data-bs-ride="carousel"
-  data-bs-interval="5000"
->
-  <div className="carousel-inner">
-    <div className="carousel-item active">
-      <img
-        src={slide1}
-        alt="Handmade Bag"
-        loading="lazy"
-        className="d-block w-100 bb-hero"
-      />
-      <div className="carousel-caption bb-cap">
-        <h2 className="fw-bold bb-cap-title">Fabiola Handmade Bag</h2>
-        <p className="mb-2">Elegance for every day.</p>
-       
-      </div>
-    </div>
+      <div
+        id="homeCarousel"
+        className="carousel slide bb-carousel"
+        data-bs-ride="carousel"
+        data-bs-interval="5000"
+      >
+        <div className="carousel-inner">
+          <div className="carousel-item active">
+            <img
+              src={slide1}
+              alt="Handmade Bag"
+              loading="lazy"
+              className="d-block w-100 bb-hero"
+            />
+            <div className="carousel-caption bb-cap">
+              <h2 className="fw-bold bb-cap-title">Fabiola Handmade Bag</h2>
+              <p className="mb-2">Elegance for every day.</p>
+            </div>
+          </div>
 
-    <div className="carousel-item">
-      <img
-        src={slide2}
-        alt="Signature Perfume"
-        loading="lazy"
-        className="d-block w-100 bb-hero"
-      />
-      <div className="carousel-caption bb-cap">
-        <h2 className="fw-bold bb-cap-title">Signature Perfume</h2>
-        <p className="mb-2">Long-lasting, alluring notes.</p>
-       
-      </div>
-    </div>
+          <div className="carousel-item">
+            <img
+              src={slide2}
+              alt="Signature Perfume"
+              loading="lazy"
+              className="d-block w-100 bb-hero"
+            />
+            <div className="carousel-caption bb-cap">
+              <h2 className="fw-bold bb-cap-title">Signature Perfume</h2>
+              <p className="mb-2">Long-lasting, alluring notes.</p>
+            </div>
+          </div>
 
-    <div className="carousel-item">
-      <img
-        src={slide3}
-        alt="Burgundy Nail Polish"
-        loading="lazy"
-        className="d-block w-100 bb-hero"
-      />
-      <div className="carousel-caption bb-cap">
-        <h2 className="fw-bold bb-cap-title">Burgundy Nail Polish</h2>
-        <p className="mb-2">Rich color. Perfect finish.</p>
-       
-      </div>
-    </div>
-  </div>
-
-
+          <div className="carousel-item">
+            <img
+              src={slide3}
+              alt="Burgundy Nail Polish"
+              loading="lazy"
+              className="d-block w-100 bb-hero"
+            />
+            <div className="carousel-caption bb-cap">
+              <h2 className="fw-bold bb-cap-title">Burgundy Nail Polish</h2>
+              <p className="mb-2">Rich color. Perfect finish.</p>
+            </div>
+          </div>
+        </div>
 
         {/* Controls */}
         <button

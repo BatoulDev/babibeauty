@@ -1,23 +1,22 @@
 // src/pages/Checkout/Checkout.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { get, post, media } from "../../utils/api";
 import "./Checkout.css";
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // From Cart page
+  const selectedItemIds = location.state?.selectedItemIds || []; // cart row IDs
+  const cartVoucherCode = (location.state?.voucherCode || localStorage.getItem("voucher_code") || "").toUpperCase();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Prefill from localStorage (carried from Cart)
-  const [voucherCode, setVoucherCode] = useState(
-    localStorage.getItem("voucher_code") || ""
-  );
-
-  // Shipping form (city + postal removed)
   const [ship, setShip] = useState({
     full_name: "",
     email: "",
@@ -26,7 +25,9 @@ export default function Checkout() {
     country: "Lebanon",
   });
 
-  // Prefill name/email from logged-in user if available
+  const [payMethod, setPayMethod] = useState("card");
+
+  // Prefill user info if logged in
   useEffect(() => {
     try {
       const raw = localStorage.getItem("auth_user");
@@ -41,18 +42,20 @@ export default function Checkout() {
     } catch {}
   }, []);
 
-  // Payment method
-  const [payMethod, setPayMethod] = useState("card"); // 'card' | 'cod'
-
+  // Load all cart rows, then keep only the selected IDs
   useEffect(() => {
     (async () => {
       try {
-        const res = await get("/cart"); // { items, subtotal, count }
-        if (!res?.items?.length) {
+        const res = await get("/cart"); // { items: [ {id, product:{name,image_path}, price, quantity}, ... ] }
+        const arr = res?.items || [];
+        const filtered = selectedItemIds.length
+          ? arr.filter((i) => selectedItemIds.includes(i.id))
+          : [];
+        if (filtered.length === 0) {
           navigate("/cart");
           return;
         }
-        setItems(res.items || []);
+        setItems(filtered);
       } catch (e) {
         if (e.status === 401) {
           navigate("/login", { state: { redirectTo: "/checkout" } });
@@ -63,25 +66,17 @@ export default function Checkout() {
         setLoading(false);
       }
     })();
-  }, [navigate]);
+  }, [navigate, selectedItemIds]);
 
-  // Totals — consistent with cart page
+  // Read-only summary (server will recompute anyway)
   const subtotal = useMemo(
     () => items.reduce((acc, it) => acc + Number(it.price) * Number(it.quantity), 0),
     [items]
   );
   const shipping = subtotal > 0 && subtotal < 100 ? 5 : 0;
-  const discount =
-    voucherCode?.trim().toUpperCase() === "WHEAT10" ? subtotal * 0.1 : 0;
+  const discount = cartVoucherCode === "WHEAT10" ? subtotal * 0.1 : 0;
   const total = Math.max(0, subtotal + shipping - discount);
   const fmt = (v) => `$${Number(v || 0).toFixed(2)}`;
-
-  // persist voucher (so if they go back & forth it stays)
-  useEffect(() => {
-    const v = (voucherCode || "").trim();
-    if (v) localStorage.setItem("voucher_code", v);
-    else localStorage.removeItem("voucher_code");
-  }, [voucherCode]);
 
   function onShipChange(e) {
     const { name, value } = e.target;
@@ -92,7 +87,6 @@ export default function Checkout() {
     e.preventDefault();
     if (submitting) return;
 
-    // quick client validation
     if (!ship.full_name || !ship.email || !ship.address1) {
       alert("Please fill your name, email and address.");
       return;
@@ -100,30 +94,28 @@ export default function Checkout() {
 
     setSubmitting(true);
     try {
+      // Send only cart row IDs + quantities; server uses the carts table.
       const payload = {
         shipping: ship,
-        payment_method: payMethod,        // 'card' or 'cod'
-        voucher_code: voucherCode?.trim() || null,
+        payment_method: payMethod,
+        voucher_code: cartVoucherCode || null,
+        items: items.map((i) => ({ id: i.id, quantity: i.quantity })), // cart row IDs
       };
 
       const res = await post("/checkout", payload);
 
-      // If you implement real card payments, provider will redirect user out.
-      // Configure provider "return_url" to your frontend "/" to land at home.
       if (res?.payment_url) {
         window.location.href = res.payment_url;
         return;
       }
 
-      // COD (or simplified flow): order created on backend
       if (res?.order_id) {
-        localStorage.removeItem("voucher_code");     // clean up
-        alert(`Order #${res.order_id} created. Thank you!`);
-        navigate("/", { replace: true });            // ⬅️ go home
+        localStorage.removeItem("voucher_code");
+        alert(`Order #${res.order_id} created. Total: ${fmt(res.total)}`);
+        navigate("/", { replace: true });
         return;
       }
 
-      // Fallback
       alert("Order created.");
       navigate("/", { replace: true });
     } catch (e) {
@@ -157,9 +149,7 @@ export default function Checkout() {
       <div className="chk-page">
         <div className="chk-empty">
           <p className="chk-error">{err}</p>
-          <button className="btn ghost" onClick={() => navigate("/cart")}>
-            Back to cart
-          </button>
+          <button className="btn ghost" onClick={() => navigate("/cart")}>Back to cart</button>
         </div>
       </div>
     );
@@ -206,32 +196,13 @@ export default function Checkout() {
             <h2 className="card-title">Payment</h2>
             <div className="pay-choices">
               <label className={`pill ${payMethod === "card" ? "active" : ""}`}>
-                <input
-                  type="radio"
-                  name="pay"
-                  checked={payMethod === "card"}
-                  onChange={() => setPayMethod("card")}
-                />
+                <input type="radio" name="pay" checked={payMethod === "card"} onChange={() => setPayMethod("card")} />
                 <span>Card (Stripe)</span>
               </label>
               <label className={`pill ${payMethod === "cod" ? "active" : ""}`}>
-                <input
-                  type="radio"
-                  name="pay"
-                  checked={payMethod === "cod"}
-                  onChange={() => setPayMethod("cod")}
-                />
+                <input type="radio" name="pay" checked={payMethod === "cod"} onChange={() => setPayMethod("cod")} />
                 <span>Cash on Delivery</span>
               </label>
-            </div>
-
-            <div className="voucher">
-              <input
-                type="text"
-                placeholder="Discount code (try WHEAT10)"
-                value={voucherCode}
-                onChange={(e) => setVoucherCode(e.target.value)}
-              />
             </div>
 
             <button type="submit" className="btn primary xl" disabled={submitting}>
@@ -240,11 +211,10 @@ export default function Checkout() {
           </section>
         </form>
 
-        {/* Right: Summary */}
+        {/* Right: read-only summary */}
         <aside className="chk-right">
           <div className="sum-card">
             <h2 className="sum-title">Order Summary</h2>
-
             <div className="sum-items">
               {items.map((it) => {
                 const src = it?.product?.image_path ? media(it.product.image_path) : "/placeholder.png";
@@ -263,13 +233,10 @@ export default function Checkout() {
             </div>
 
             <div className="sum-divider" />
-
             <div className="sum-row"><span>Sub total</span><span>{fmt(subtotal)}</span></div>
-            <div className="sum-row"><span>Discount</span><span>{discount ? `- ${fmt(discount)}` : fmt(0)}</span></div>
+            {cartVoucherCode && <div className="sum-row"><span>Discount ({cartVoucherCode})</span><span>{discount ? `- ${fmt(discount)}` : fmt(0)}</span></div>}
             <div className="sum-row"><span>Delivery fee</span><span>{fmt(shipping)}</span></div>
-
             <div className="sum-divider" />
-
             <div className="sum-row total"><span>Total</span><span>{fmt(total)}</span></div>
           </div>
         </aside>
