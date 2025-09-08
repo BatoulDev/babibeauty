@@ -1,10 +1,20 @@
 // src/pages/CategoryPage/CategoryPage.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { useParams, NavLink } from "react-router-dom";
 import { fetchJson } from "../../utils/api";
 import RatingStars from "../../components/RatingStars/RatingStars";
 import "./CategoryPage.css";
-import { readPrefetchedCategoryFirstPage, prefetchProductDetails } from "../../utils/prefetch";
+import {
+  prefetchCategoryFirstPage,
+  prefetchProductDetails,
+  prefetchImages,
+} from "../../utils/prefetch";
 
 /* ---------------- helpers ---------------- */
 
@@ -19,9 +29,11 @@ function usePreloadImages(urls = [], count = 2) {
     const head = document.head;
     const links = urls.slice(0, count).map((u) => {
       if (!u) return null;
-      if ([...head.querySelectorAll('link[rel="preload"][as="image"]')].some(
-        (lnk) => lnk.getAttribute("href") === u
-      ))
+      if (
+        [...head.querySelectorAll('link[rel="preload"][as="image"]')].some(
+          (lnk) => lnk.getAttribute("href") === u
+        )
+      )
         return null;
       const l = document.createElement("link");
       l.rel = "preload";
@@ -70,22 +82,26 @@ export default function CategoryPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
-  // avoid header flashes
   const [firstFetchDone, setFirstFetchDone] = useState(false);
 
   const loadingRef = useRef(false);
   const sentinelRef = useRef(null);
-  const controllerRef = useRef(null); // keep a single in-flight request
+  const controllerRef = useRef(null);
 
+  // Parse API response (supports both array and Laravel paginator shapes)
   const parseResponse = (res, pageNum) => {
     const data = res?.data ?? res ?? [];
     const arr = Array.isArray(data) ? data : [];
-    const currentPage = Number(res?.current_page ?? res?.meta?.current_page ?? pageNum);
-    const lastPage = Number(res?.last_page ?? res?.meta?.last_page ?? pageNum);
+    const currentPage = Number(
+      res?.current_page ?? res?.meta?.current_page ?? pageNum
+    );
+    const lastPage = Number(
+      res?.last_page ?? res?.meta?.last_page ?? pageNum
+    );
     return { arr, hasMore: currentPage < lastPage };
   };
 
+  // Fetch products
   const loadPage = useCallback(
     async (pageNum, { silent = false } = {}) => {
       if (loadingRef.current) return;
@@ -95,34 +111,37 @@ export default function CategoryPage() {
         return;
       }
 
-      // abort any previous request before starting a new one
+      // cancel previous request
       if (controllerRef.current) controllerRef.current.abort("newer-request");
       const ctrl = new AbortController();
       controllerRef.current = ctrl;
 
       loadingRef.current = true;
       if (!silent) setLoading(true);
+
       try {
         const qs = new URLSearchParams({
           category_id: String(catId),
           page: String(pageNum),
-          per_page: pageNum === 1 ? "12" : "24",
+          per_page: "12", // keep stable first paint size
           lite: "1",
         }).toString();
 
-        // ensure fetchJson forwards the signal to fetch()
-        const res = await fetchJson(`/api/products?${qs}`, { signal: ctrl.signal });
+        const res = await fetchJson(`/api/products?${qs}`, {
+          signal: ctrl.signal,
+        });
         const { arr, hasMore } = parseResponse(res, pageNum);
 
         setItems((prev) => (pageNum === 1 ? arr : prev.concat(arr)));
         setHasMore(Boolean(hasMore));
         setErr("");
+
+        // prefetch product images
+        prefetchImages(arr);
       } catch (e) {
-        if (isAbortError(e)) {
-          // Silent on aborts
-          return;
+        if (!isAbortError(e)) {
+          setErr(e?.message || "Failed to fetch products.");
         }
-        setErr(e?.message || "Failed to fetch products.");
       } finally {
         if (pageNum === 1) setFirstFetchDone(true);
         if (!silent) setLoading(false);
@@ -132,41 +151,51 @@ export default function CategoryPage() {
     [catId]
   );
 
-  // Reset when category changes
+  /* ---------- Reset when category changes ---------- */
   useEffect(() => {
-    if (controllerRef.current) controllerRef.current.abort("category-changed");
-
-    setLoading(true);
-    setFirstFetchDone(false);
+    // abort any in-flight request
+    if (controllerRef.current) controllerRef.current.abort("category-change");
 
     setItems([]);
     setPage(1);
     setHasMore(true);
     setErr("");
-    try {
-      window.scrollTo({ top: 0, behavior: "instant" });
-    } catch {}
+    setFirstFetchDone(false);
+    setLoading(true); // ensure skeletons on first paint
+  }, [catId]);
 
-    // paint prefetched first page immediately (if present)
-    const pref = readPrefetchedCategoryFirstPage(catId);
-    if (pref) {
-      const data = pref?.data ?? pref ?? [];
-      const arr = Array.isArray(data) ? data : [];
-      setItems(arr);
-      setLoading(false);
-      setFirstFetchDone(true);
-      // Revalidate in background
-      loadPage(1, { silent: true });
-    } else {
-      loadPage(1);
+  /* ---------- Initial load: prefetch is a hint, real fetch drives UI ---------- */
+  useEffect(() => {
+    let canceled = false;
+
+    async function init() {
+      // fire-and-forget prefetch (do NOT toggle loading/firstFetchDone here)
+      prefetchCategoryFirstPage(catId)
+        .then((pref) => {
+          if (canceled) return;
+          const data = pref?.data ?? pref ?? [];
+          if (Array.isArray(data) && data.length) {
+            // show something fast only if we currently have nothing
+            setItems((prev) => (prev.length ? prev : data));
+            prefetchImages(data);
+          }
+        })
+        .catch(() => {});
+
+      // the real fetch controls the UI
+      await loadPage(1, { silent: false });
     }
 
+    init();
+
     return () => {
+      canceled = true;
+      // also abort any request on unmount
       if (controllerRef.current) controllerRef.current.abort("unmount");
     };
   }, [catId, loadPage]);
 
-  // Infinite scroll sentinel
+  // Infinite scroll
   useEffect(() => {
     if (!hasMore) return;
     const el = sentinelRef.current;
@@ -191,22 +220,29 @@ export default function CategoryPage() {
 
     io.observe(el);
     return () => io.disconnect();
-  }, [hasMore, page, loadPage]);
+  }, [hasMore, page, loadPage, catId]);
 
-  // Preload first few images
+  // Preload first few images aggressively
   const firstUrls = useMemo(
-    () => (items || []).slice(0, 4).map((p) => p.image_url).filter(Boolean),
+    () =>
+      (items || [])
+        .slice(0, 4)
+        .map((p) => p.image_url)
+        .filter(Boolean),
     [items]
   );
   usePreloadImages(firstUrls, 3);
 
-  // skeletons while loading
+  // Skeletons
   const list =
     items.length === 0 && loading
-      ? Array.from({ length: 8 }).map((_, i) => ({ skeleton: true, id: `skel-${i}` }))
+      ? Array.from({ length: 8 }).map((_, i) => ({
+          skeleton: true,
+          id: `skel-${i}`,
+        }))
       : items;
 
-  // header count label
+  // Count label
   const countLabel = !firstFetchDone
     ? "…"
     : `${items.length}${items.length > 0 && hasMore ? " +" : ""} items`;
@@ -218,17 +254,22 @@ export default function CategoryPage() {
         <span className="bb-prod-count">{countLabel}</span>
       </div>
 
-      {/* Only show real errors (ignore aborts) */}
       {err && <div className="alert alert-danger">{err}</div>}
-
-      {/* 🔕 Removed the "No products found" message completely */}
 
       <div className="bb-prod-grid">
         {list.map((p, idx) => (
-          <article key={p.id ?? `skel-${idx}`} className={`bb-card ${p.skeleton ? "skeleton" : ""}`}>
+          <article
+            key={p.id ?? `skel-${idx}`}
+            className={`bb-card ${p.skeleton ? "skeleton" : ""}`}
+          >
             <div className="bb-imgbox">
               {!p.skeleton ? (
-                <SpeedyImage src={p.image_url} srcSet={p.image_srcset} alt={p.name} index={idx} />
+                <SpeedyImage
+                  src={p.image_url}
+                  srcSet={p.image_srcset}
+                  alt={p.name}
+                  index={idx}
+                />
               ) : (
                 <div className="bb-img-skel" />
               )}
@@ -236,14 +277,26 @@ export default function CategoryPage() {
 
             <div className="bb-card-body">
               <h3 className="bb-name">{p.skeleton ? "\u00A0" : p.name}</h3>
-              {!p.skeleton && <RatingStars value={p.rating ?? 0} count={p.reviews_count ?? 0} />}
+              {!p.skeleton && (
+                <RatingStars
+                  value={p.rating ?? 0}
+                  count={p.reviews_count ?? 0}
+                />
+              )}
               <div className="bb-price">
                 {p.skeleton ? "\u00A0" : `$${Number(p.price ?? 0).toFixed(2)}`}
               </div>
               {!p.skeleton && (
                 <NavLink
                   to={`/product/${p.id}`}
-                  state={{ pre: { id: p.id, name: p.name, price: p.price, image_url: p.image_url } }}
+                  state={{
+                    pre: {
+                      id: p.id,
+                      name: p.name,
+                      price: p.price,
+                      image_url: p.image_url,
+                    },
+                  }}
                   className="bb-btn bb-btn-link"
                   onMouseEnter={() => prefetchProductDetails(p.id)}
                   onTouchStart={() => prefetchProductDetails(p.id)}

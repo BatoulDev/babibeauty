@@ -1,4 +1,4 @@
-// react/src/utils/prefetch.js
+// src/utils/prefetch.js
 import { fetchJson } from "./api";
 
 const mem = new Map(); // key -> { _type: "data" | "promise", payload, ts }
@@ -7,7 +7,7 @@ const VERSION = "v1"; // bump to invalidate all localStorage caches on deploy
 
 const now = () => Date.now();
 const kCat = (catId) => `${VERSION}::cat:${catId}:p1:lite`;
-const kProd = (id)   => `${VERSION}::prod:${id}:fast`;
+const kProd = (id) => `${VERSION}::prod:${id}:fast`;
 
 function fresh(entry) {
   return entry && entry._type === "data" && now() - entry.ts < TTL_MS;
@@ -20,7 +20,9 @@ function readLS(key) {
     const obj = JSON.parse(raw);
     if (now() - (obj.ts || 0) > TTL_MS) return null;
     return obj.payload || null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function writeLS(key, payload) {
@@ -30,24 +32,20 @@ function writeLS(key, payload) {
 }
 
 /* ---------------- Category page 1 (lite) ---------------- */
-
 export async function prefetchCategoryFirstPage(catId) {
   if (!catId) return;
   const key = kCat(catId);
 
-  // memory hit
   const m = mem.get(key);
   if (fresh(m)) return m.payload;
   if (m && m._type === "promise") return m.payload;
 
-  // localStorage hit
   const ls = readLS(key);
   if (ls) {
     mem.set(key, { _type: "data", payload: ls, ts: now() });
     return ls;
   }
 
-  // fetch
   const qs = new URLSearchParams({
     category_id: String(catId),
     page: "1",
@@ -61,7 +59,10 @@ export async function prefetchCategoryFirstPage(catId) {
       writeLS(key, res);
       return res;
     })
-    .catch((e) => { mem.delete(key); throw e; });
+    .catch((e) => {
+      mem.delete(key);
+      throw e;
+    });
 
   mem.set(key, { _type: "promise", payload: p, ts: now() });
   return p;
@@ -80,7 +81,6 @@ export function readPrefetchedCategoryFirstPage(catId) {
 }
 
 /* ---------------- Product details (fast) ---------------- */
-
 export async function prefetchProductDetails(id) {
   if (!id) return;
   const key = kProd(id);
@@ -92,9 +92,13 @@ export async function prefetchProductDetails(id) {
   const ls = readLS(key);
   if (ls) {
     mem.set(key, { _type: "data", payload: ls, ts: now() });
-    // warm image asynchronously
     if (ls?.image_url && typeof Image !== "undefined") {
-      try { const img = new Image(); img.decoding = "async"; img.loading = "eager"; img.src = ls.image_url; } catch {}
+      try {
+        const img = new Image();
+        img.decoding = "async";
+        img.loading = "eager";
+        img.src = ls.image_url;
+      } catch {}
     }
     return ls;
   }
@@ -104,11 +108,19 @@ export async function prefetchProductDetails(id) {
       mem.set(key, { _type: "data", payload: res, ts: now() });
       writeLS(key, res);
       if (res?.image_url && typeof Image !== "undefined") {
-        try { const img = new Image(); img.decoding = "async"; img.loading = "eager"; img.src = res.image_url; } catch {}
+        try {
+          const img = new Image();
+          img.decoding = "async";
+          img.loading = "eager";
+          img.src = res.image_url;
+        } catch {}
       }
       return res;
     })
-    .catch((e) => { mem.delete(key); throw e; });
+    .catch((e) => {
+      mem.delete(key);
+      throw e;
+    });
 
   mem.set(key, { _type: "promise", payload: p, ts: now() });
   return p;
@@ -126,8 +138,7 @@ export function readPrefetchedProductDetails(id) {
   return null;
 }
 
-/* ---------------- Hover prefetch for /category/:id links ---------------- */
-
+/* ---------------- Hover prefetch / warm images ---------------- */
 function warmImages(urls = [], max = 6) {
   try {
     urls.slice(0, max).forEach((u) => {
@@ -141,10 +152,24 @@ function warmImages(urls = [], max = 6) {
 }
 
 /**
- * Install a delegated hover/focus/touch prefetch on any link that points to
- * /category/:id. Also works if the element (or a parent) has data-cat-id.
- * Call once at app startup.
+ * Prefetch/warm product images in the background.
+ * Safe to call with any array of product objects that have `image_url`.
  */
+export function prefetchImages(products = []) {
+  if (!Array.isArray(products)) return;
+  try {
+    products.forEach((p) => {
+      if (p?.image_url) {
+        const img = new Image();
+        img.decoding = "async";
+        img.loading = "eager";
+        img.src = p.image_url;
+      }
+    });
+  } catch {}
+}
+
+/* ---------------- Hover prefetch for /category/:id links ---------------- */
 export function installCategoryHoverPrefetch({
   selector = 'a[href^="/category/"], a[href*="/category/"]',
   attr = "data-cat-id",
@@ -152,7 +177,7 @@ export function installCategoryHoverPrefetch({
 } = {}) {
   if (typeof window === "undefined" || typeof document === "undefined") return () => {};
 
-  const seen = new Set(); // catIds we've already prefetched in this session
+  const seen = new Set();
 
   const schedule = (catId) => {
     if (!Number.isFinite(catId) || seen.has(catId)) return;
@@ -161,7 +186,6 @@ export function installCategoryHoverPrefetch({
     const runner = () =>
       prefetchCategoryFirstPage(catId)
         .then((res) => {
-          // warm a few images for ultra-fast first paint
           const data = res?.data ?? res ?? [];
           const arr = Array.isArray(data) ? data : [];
           const urls = arr.map((p) => p.image_url).filter(Boolean);
@@ -177,13 +201,11 @@ export function installCategoryHoverPrefetch({
   };
 
   const getIdFrom = (el) => {
-    // prefer explicit data attribute on the element or its parents
     let node = el;
     for (let i = 0; i < 3 && node; i += 1, node = node.parentElement) {
       const v = node?.getAttribute?.(attr);
       if (v) return Number(v);
     }
-    // parse href (/category/:id)
     const href = el.getAttribute && el.getAttribute("href");
     if (!href) return null;
     const m = href.match(/\/category\/(\d+)(?:\D|$)/);
@@ -197,17 +219,14 @@ export function installCategoryHoverPrefetch({
     const id = getIdFrom(a);
     if (!Number.isFinite(id)) return;
 
-    // tiny debounce so we don’t prefetch while the cursor is just passing over
     clearTimeout(a.__pf_timer);
     a.__pf_timer = setTimeout(() => schedule(id), delayMs);
   };
 
   document.addEventListener("mouseover", handler, { passive: true });
-  // focusin doesn't need passive; leave options empty for widest support
   document.addEventListener("focusin", handler);
   document.addEventListener("touchstart", handler, { passive: true });
 
-  // uninstaller
   return () => {
     document.removeEventListener("mouseover", handler);
     document.removeEventListener("focusin", handler);
