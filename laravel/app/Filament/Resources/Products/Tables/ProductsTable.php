@@ -7,14 +7,19 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\IconColumn;
 
+// v4 actions live here:
+use Filament\Actions\ActionGroup;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+
 class ProductsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
             ->columns([
-                // If you have an accessor getImageUrlAttribute() use 'image_url'.
-                // Otherwise use 'image_path' with ->disk('public')
                 ImageColumn::make('image_path')
                     ->label('Image')
                     ->disk('public')
@@ -44,6 +49,23 @@ class ProductsTable
                     ->boolean()
                     ->label('Active'),
             ])
+
+            // Row actions (v4: recordActions, and actions come from Filament\Actions)
+            ->recordActions([
+                ActionGroup::make([
+                    // Add ViewAction::make() if you have a View page or modal schema
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ]),
+            ])
+
+            // Bulk actions go in toolbar/header in v4
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
+            ])
+
             ->defaultSort('created_at', 'desc');
     }
 }

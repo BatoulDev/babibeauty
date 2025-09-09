@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\BeautyExperts\Pages;
 
 use App\Filament\Resources\BeautyExperts\BeautyExpertResource;
-use Filament\Actions\CreateAction;
+use Filament\Actions\CreateAction;     // v4 import
 use Filament\Resources\Pages\ListRecords;
 
 class ListBeautyExperts extends ListRecords

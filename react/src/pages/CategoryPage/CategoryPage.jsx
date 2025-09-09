@@ -74,8 +74,9 @@ function SpeedyImage({ src, srcSet, sizes, alt, index }) {
 /* ---------------- page ---------------- */
 
 export default function CategoryPage() {
-  const { id } = useParams(); // /category/:id
+  const { id } = useParams(); // /category/:id (must be numeric for this page)
   const catId = Number(id);
+  const validCat = Number.isFinite(catId) && catId > 0;
 
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -88,15 +89,32 @@ export default function CategoryPage() {
   const sentinelRef = useRef(null);
   const controllerRef = useRef(null);
 
-  // Parse API response (supports both array and Laravel paginator shapes)
+  // Normalize API responses into { arr, hasMore }
   const parseResponse = (res, pageNum) => {
-    const data = res?.data ?? res ?? [];
-    const arr = Array.isArray(data) ? data : [];
+    // Accept:
+    // A) { data: [...], current_page, last_page }
+    // B) { data: { data: [...], current_page, last_page } }
+    // C) [...]
+    const inner =
+      Array.isArray(res)
+        ? { data: res }
+        : Array.isArray(res?.data)
+        ? res
+        : (res?.data && typeof res.data === "object")
+        ? res.data
+        : res || {};
+
+    const arr = Array.isArray(inner?.data)
+      ? inner.data
+      : Array.isArray(inner)
+      ? inner
+      : [];
+
     const currentPage = Number(
-      res?.current_page ?? res?.meta?.current_page ?? pageNum
+      inner?.current_page ?? res?.current_page ?? res?.meta?.current_page ?? pageNum
     );
     const lastPage = Number(
-      res?.last_page ?? res?.meta?.last_page ?? pageNum
+      inner?.last_page ?? res?.last_page ?? res?.meta?.last_page ?? pageNum
     );
     return { arr, hasMore: currentPage < lastPage };
   };
@@ -105,11 +123,7 @@ export default function CategoryPage() {
   const loadPage = useCallback(
     async (pageNum, { silent = false } = {}) => {
       if (loadingRef.current) return;
-      if (!Number.isFinite(catId) || catId <= 0) {
-        setErr("Invalid category id.");
-        setLoading(false);
-        return;
-      }
+      if (!validCat) return; // <- do nothing until catId is valid
 
       // cancel previous request
       if (controllerRef.current) controllerRef.current.abort("newer-request");
@@ -119,36 +133,42 @@ export default function CategoryPage() {
       loadingRef.current = true;
       if (!silent) setLoading(true);
 
+      let wasAborted = false;
+
       try {
         const qs = new URLSearchParams({
           category_id: String(catId),
           page: String(pageNum),
-          per_page: "12", // keep stable first paint size
+          per_page: "12",
           lite: "1",
         }).toString();
 
         const res = await fetchJson(`/api/products?${qs}`, {
           signal: ctrl.signal,
         });
+
         const { arr, hasMore } = parseResponse(res, pageNum);
 
         setItems((prev) => (pageNum === 1 ? arr : prev.concat(arr)));
         setHasMore(Boolean(hasMore));
         setErr("");
 
-        // prefetch product images
         prefetchImages(arr);
       } catch (e) {
-        if (!isAbortError(e)) {
+        if (isAbortError(e)) {
+          wasAborted = true;
+        } else {
           setErr(e?.message || "Failed to fetch products.");
         }
       } finally {
-        if (pageNum === 1) setFirstFetchDone(true);
-        if (!silent) setLoading(false);
         loadingRef.current = false;
+        if (!wasAborted) {
+          if (pageNum === 1) setFirstFetchDone(true);
+          if (!silent) setLoading(false);
+        }
       }
     },
-    [catId]
+    [catId, validCat]
   );
 
   /* ---------- Reset when category changes ---------- */
@@ -156,33 +176,45 @@ export default function CategoryPage() {
     // abort any in-flight request
     if (controllerRef.current) controllerRef.current.abort("category-change");
 
+    // If catId is invalid (first render), keep skeletons & wait
+    if (!validCat) {
+      setItems([]);
+      setPage(1);
+      setHasMore(true);
+      setErr("");
+      setFirstFetchDone(false);
+      setLoading(true);
+      return;
+    }
+
+    // Valid category: hard reset and then fetch
     setItems([]);
     setPage(1);
     setHasMore(true);
     setErr("");
     setFirstFetchDone(false);
-    setLoading(true); // ensure skeletons on first paint
-  }, [catId]);
+    setLoading(true);
+  }, [validCat, catId]);
 
-  /* ---------- Initial load: prefetch is a hint, real fetch drives UI ---------- */
+  /* ---------- Initial load: only run when catId is valid ---------- */
   useEffect(() => {
+    if (!validCat) return;
+
     let canceled = false;
 
     async function init() {
-      // fire-and-forget prefetch (do NOT toggle loading/firstFetchDone here)
+      // fire-and-forget prefetch (no flag flips)
       prefetchCategoryFirstPage(catId)
         .then((pref) => {
           if (canceled) return;
-          const data = pref?.data ?? pref ?? [];
-          if (Array.isArray(data) && data.length) {
-            // show something fast only if we currently have nothing
-            setItems((prev) => (prev.length ? prev : data));
-            prefetchImages(data);
+          const { arr } = parseResponse(pref, 1);
+          if (Array.isArray(arr) && arr.length) {
+            setItems((prev) => (prev.length ? prev : arr));
+            prefetchImages(arr);
           }
         })
         .catch(() => {});
 
-      // the real fetch controls the UI
       await loadPage(1, { silent: false });
     }
 
@@ -190,14 +222,13 @@ export default function CategoryPage() {
 
     return () => {
       canceled = true;
-      // also abort any request on unmount
       if (controllerRef.current) controllerRef.current.abort("unmount");
     };
-  }, [catId, loadPage]);
+  }, [validCat, catId, loadPage]);
 
   // Infinite scroll
   useEffect(() => {
-    if (!hasMore) return;
+    if (!validCat || !hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
 
@@ -220,7 +251,7 @@ export default function CategoryPage() {
 
     io.observe(el);
     return () => io.disconnect();
-  }, [hasMore, page, loadPage, catId]);
+  }, [validCat, hasMore, page, loadPage, catId]);
 
   // Preload first few images aggressively
   const firstUrls = useMemo(
@@ -233,14 +264,16 @@ export default function CategoryPage() {
   );
   usePreloadImages(firstUrls, 3);
 
-  // Skeletons
-  const list =
-    items.length === 0 && loading
-      ? Array.from({ length: 8 }).map((_, i) => ({
-          skeleton: true,
-          id: `skel-${i}`,
-        }))
-      : items;
+  // Skeletons: keep showing until we have a valid catId AND first successful load
+  const showingSkeletons =
+    (!validCat) || (items.length === 0 && (loading || !firstFetchDone));
+
+  const list = showingSkeletons
+    ? Array.from({ length: 8 }).map((_, i) => ({
+        skeleton: true,
+        id: `skel-${i}`,
+      }))
+    : items;
 
   // Count label
   const countLabel = !firstFetchDone
@@ -248,7 +281,7 @@ export default function CategoryPage() {
     : `${items.length}${items.length > 0 && hasMore ? " +" : ""} items`;
 
   return (
-    <div className="container bb-prod-wrap">
+    <div className="container bb-prod-wrap" key={validCat ? catId : "pending"}>
       <div className="bb-prod-head">
         <h1 className="bb-prod-title">Products</h1>
         <span className="bb-prod-count">{countLabel}</span>
