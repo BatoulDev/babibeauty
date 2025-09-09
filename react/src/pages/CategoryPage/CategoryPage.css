@@ -10,7 +10,7 @@
 /* header */
 .bb-prod-wrap{ padding: clamp(18px, 3vw, 28px) 0 42px; }
 .bb-prod-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
-.bb-prod-title{ margin:0; font-weight:800; color:var(--bb-burgundy); }
+.bb-prod-title{ margin:0; font-weight:800; color:wheat; }
 .bb-prod-count{ color:#7a6d6d; }
 
 /* grid */

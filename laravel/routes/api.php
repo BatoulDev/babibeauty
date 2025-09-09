@@ -96,4 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout', [CheckoutController::class, 'create']);
 });
 
-  
+  Route::middleware('auth:sanctum')->group(function() {
+    Route::get('/users', [\App\Http\Controllers\UserController::class, 'index']);
+});
+Route::middleware('auth:sanctum')->post('/checkout', [OrderController::class, 'checkoutSimple']);

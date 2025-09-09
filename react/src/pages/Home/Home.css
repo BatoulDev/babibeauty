@@ -83,3 +83,8 @@ body { background: linear-gradient(180deg, #561C24 0%, #6f2b32 100%); }
 .bb-footer{ background:#561C24; color:#fff; }
 .bb-footer a{ color:#eee8dc; text-decoration:none; }
 .bb-footer a:hover{ color:#fff; }
+.bb-cap-btn:active {
+  background-color:#4a1820;           /* darker accent on press */
+  transform: scale(0.94);             /* shrink a bit to show press */
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.25) inset;
+}

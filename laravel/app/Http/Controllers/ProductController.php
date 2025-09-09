@@ -12,40 +12,61 @@ class ProductController extends Controller
 {
   public function index(Request $request)
 {
-    $q = Product::query()
-        ->select('id','name','price','image_path','category_id','brand_id','stock','is_active')
-        ->where('is_active', 1)
-        ->when($request->filled('category_id'),
-            fn ($qq) => $qq->where('category_id', (int) $request->category_id))
-        ->when($request->filled('brand_id'),
-            fn ($qq) => $qq->where('brand_id', (int) $request->brand_id))
-        ->orderBy('name')
-        ->withAvg('reviews', 'rating')
-        ->withCount('reviews');
+    $catId   = (int) $request->input('category_id', 0);
+    $brandId = (int) $request->input('brand_id', 0);
+    $perPage = max(1, (int) $request->input('per_page', 24));
+    $page    = max(1, (int) $request->input('page', 1));
+    $lite    = $request->boolean('lite', true); // 👈 default: lite
 
-    // ✅ paginate instead of get()
-    $perPage = (int) $request->input('per_page', 24);
-    $products = $q->paginate($perPage);
+    $ck = sprintf('products:index:v3:c=%d:b=%d:p=%d:pp=%d:lite=%d', $catId, $brandId, $page, $perPage, $lite ? 1 : 0);
 
-    // ✅ transform each item
-    $mapped = $products->getCollection()->map(function ($p) {
+    $payload = \Cache::remember($ck, 60, function () use ($catId, $brandId, $perPage, $page, $lite) {
+        $q = \App\Models\Product::query()
+            ->select('id','name','price','image_path','category_id','brand_id','is_active','updated_at')
+            ->where('is_active', 1)
+            ->when($catId  > 0, fn($qq) => $qq->where('category_id', $catId))
+            ->when($brandId> 0, fn($qq) => $qq->where('brand_id',   $brandId))
+            ->orderByDesc('id');
+
+        if (!$lite) {
+            $q->withAvg('reviews', 'rating')
+              ->withCount('reviews');
+        }
+
+        $paginator = $q->paginate($perPage, ['*'], 'page', $page);
+
+        $data = $paginator->getCollection()->map(function ($p) use ($lite) {
+            return [
+                'id'        => $p->id,
+                'name'      => $p->name,
+                'price'     => (float) $p->price,
+                'image_url' => $this->publicImageUrl($p->image_path),
+                // include only if not lite (avoid extra DB work on first paint)
+                'rating'        => $lite ? null : (is_numeric($p->reviews_avg_rating ?? null) ? round($p->reviews_avg_rating, 1) : null),
+                'reviews_count' => $lite ? 0    : (int) ($p->reviews_count ?? 0),
+            ];
+        })->values();
+
         return [
-            'id'            => $p->id,
-            'name'          => $p->name,
-            'price'         => (float) $p->price,
-            'image_url'     => $this->publicImageUrl($p->image_path),
-            'rating'        => is_numeric($p->reviews_avg_rating ?? null)
-                                ? round($p->reviews_avg_rating, 1) : null,
-            'reviews_count' => (int) ($p->reviews_count ?? 0),
+            'data'         => $data,
+            'current_page' => (int) $paginator->currentPage(),
+            'last_page'    => (int) $paginator->lastPage(),
+            'per_page'     => (int) $paginator->perPage(),
+            'total'        => (int) $paginator->total(),
         ];
     });
 
-    // ✅ replace the paginator's collection with transformed items
-    $products->setCollection($mapped);
+    $etag = '"' . sha1(json_encode($payload)) . '"';
+    if (trim((string) request()->header('If-None-Match')) === $etag) {
+        return response('', 304)
+            ->header('ETag', $etag)
+            ->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+    }
 
-    return response()->json($products);
+    return response()->json($payload)
+        ->header('ETag', $etag)
+        ->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
 }
-
 
     /**
      * FAST, cacheable details endpoint (small payload for first paint).
